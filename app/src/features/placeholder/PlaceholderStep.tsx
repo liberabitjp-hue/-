@@ -39,6 +39,24 @@ const COPY_REQUIREMENTS = [
   'コピー操作によって元のExcelファイルをアプリ側から変更することはない',
 ]
 
+/** 別紙4.6「利用範囲と保証範囲の表示」。自動作成画面・確定画面の両方に表示する
+ *  固定の注記（ローカル単独版であることの限界を利用者に誤解させないため）。
+ *  受入条件が「自動作成画面と確定画面の両方で確認できる」ことなので、
+ *  'generate'と'finalize'の双方に同じ内容を出す。 */
+function ScopeNotice() {
+  return (
+    <div className="notice notice-info">
+      <p style={{ margin: '0 0 4px' }}>このアプリの利用範囲・保証範囲（別紙4.6）</p>
+      <ul style={{ margin: 0, paddingLeft: '1.2em' }}>
+        <li>この版は、担任が翌月の月案・学習予定表を作成する作業を支援するためのものです。</li>
+        <li>他学級・他教員・特別教室の最新の使用状況を自動で取得することはありません。</li>
+        <li>競合の検査は、取り込んだ固定時間割・分科資料などの範囲内で行います。</li>
+        <li>最終的な確定前には、必ず担当者ご自身の目で内容をご確認ください。</li>
+      </ul>
+    </div>
+  )
+}
+
 interface Props {
   stepId: StepId
   /** 別紙4.3「低確度・未検出の項目がある状態では、自動作成を開始できない」に対応した判定。
@@ -66,6 +84,7 @@ export function PlaceholderStep({ stepId, canStartGeneration, importedCount, map
           )}
         </div>
       )}
+      {(stepId === 'generate' || stepId === 'finalize') && <ScopeNotice />}
       <div className="panel future-panel">
         <h2>
           {STEP_LABELS[stepId]} <span className="helptext">（フェーズ{phase} - 未実装）</span>
