@@ -93,6 +93,13 @@ export interface FieldDetection {
   note?: string
   /** True once the user has manually edited this detection away from the guess. */
   overridden?: boolean
+  /** When set, the mapping screen renders a dropdown of these choices instead of a
+   *  free-text range box (e.g. "which sheet is this month's real timetable?"),
+   *  and `rangeRef` holds the selected option. */
+  options?: string[]
+  /** True for a row the user added by hand (not system-detected). Always shown as
+   *  already reviewed, and removable from the mapping screen. */
+  custom?: boolean
 }
 
 /** The confirmed, saved mapping for one file kind ("学校別書式設定"). */

@@ -19,8 +19,11 @@ export function detectClassHoursEvents(wb: ParsedWorkbook): FieldDetection[] {
     out.push(...detectColumns(representative))
   }
 
-  // Report which sheet was chosen as the "adopted" version for each calendar month,
-  // since this file commonly contains revised duplicates (e.g. "5月", "5月 (2)").
+  // Which sheet is the real timetable for each calendar month? This file commonly
+  // contains revised duplicates (e.g. "5月", "5月 (2)"), and which one is current
+  // is a judgment call the system cannot make reliably - so every month with more
+  // than one candidate sheet is left unselected (no default) and must be chosen
+  // by the user; a month with exactly one candidate needs no choice.
   const byMonth = new Map<number, SheetSnapshot[]>()
   for (const sheet of wb.sheets) {
     const m = monthOf(sheet)
@@ -28,31 +31,47 @@ export function detectClassHoursEvents(wb: ParsedWorkbook): FieldDetection[] {
     if (!byMonth.has(m)) byMonth.set(m, [])
     byMonth.get(m)!.push(sheet)
   }
-  const summaryLines: string[] = []
-  for (let m = 4; m <= 12; m++) pushMonthLine(m)
-  for (let m = 1; m <= 3; m++) pushMonthLine(m)
-  function pushMonthLine(m: number) {
+  for (const m of [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]) {
     const sheets = byMonth.get(m)
     if (!sheets || sheets.length === 0) {
-      summaryLines.push(`${m}月: シートが見つかりません`)
-      return
+      out.push(
+        makeDetection(
+          `classHoursEvents.monthSheet.${m}`,
+          `${m}月に使うシート`,
+          wb.fileName,
+          '',
+          [],
+          'none',
+          'この月のシートが見つかりませんでした。ファイルの中身を確認してください。',
+        ),
+      )
+      continue
     }
-    const adopted = sheets[sheets.length - 1] // later in workbook order = newer revision, by convention
-    const others = sheets.length > 1 ? `（他に ${sheets.slice(0, -1).map((s) => s.name).join(', ')} あり）` : ''
-    summaryLines.push(`${m}月: 「${adopted.name}」を採用 ${others}`)
-  }
-
-  out.push(
-    makeDetection(
-      'classHoursEvents.monthSheetSelection',
-      '月ごとに使用するシートの判定',
+    if (sheets.length === 1) {
+      out.push(
+        makeDetection(
+          `classHoursEvents.monthSheet.${m}`,
+          `${m}月に使うシート`,
+          wb.fileName,
+          sheets[0].name,
+          [sheets[0].name],
+          'high',
+        ),
+      )
+      continue
+    }
+    const detection = makeDetection(
+      `classHoursEvents.monthSheet.${m}`,
+      `${m}月に使うシート`,
       wb.fileName,
-      '(複数シート)',
-      summaryLines,
-      byMonth.size >= 12 ? 'medium' : 'low',
-      '同じ月に複数回改訂されたシートがある場合、シート順で最後のものを採用候補としています。誤りがあれば選び直してください。',
-    ),
-  )
+      '',
+      sheets.map((s) => s.name),
+      'low',
+      `${sheets.length}件の候補シートが見つかりました。どれが正しい最新版か選んでください（自動では決めません）。`,
+    )
+    detection.options = sheets.map((s) => s.name)
+    out.push(detection)
+  }
 
   return out
 }

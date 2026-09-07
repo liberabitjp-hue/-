@@ -13,6 +13,14 @@ const FILE_KIND_HINTS: Record<FileKind, string> = {
   fractionsTable: '例: 【作業補助用】分数一覧_分母1から15.xlsx（進度の分数の入力補助・検証用）',
 }
 
+/** These two are living documents that get revised during the year (行事の変更、
+ *  分科の異動等）。同じ枠に最新版を取り込み直せば、いつでも差し替えられる。 */
+const LIVING_FILE_KINDS: FileKind[] = ['classHoursEvents', 'fixedTimetable']
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('ja-JP')
+}
+
 export function ImportStep() {
   const { workbooks, mappings, saveWorkbook } = useAppState()
   const [busy, setBusy] = useState<FileKind | null>(null)
@@ -73,10 +81,19 @@ export function ImportStep() {
             <div className="file-kind-card-head">
               <span className="file-kind-name">{FILE_KIND_LABELS[kind]}</span>
               <span className="file-kind-status">
-                {wb ? `取込み済み: ${wb.fileName}（${wb.sheets.length}シート）` : '未取込み'}
+                {wb
+                  ? `取込み済み: ${wb.fileName}（${wb.sheets.length}シート、${formatDateTime(wb.importedAt)} 取込み）`
+                  : '未取込み'}
               </span>
             </div>
             <p className="helptext">{FILE_KIND_HINTS[kind]}</p>
+            {LIVING_FILE_KINDS.includes(kind) && (
+              <p className="helptext">
+                この資料は年間を通じて随時更新されます。新しい版が出たら、この枠に取り込み直してください。
+                取り込み直すと内容はすべて新しいファイルに置き換わります（表の形が変わった場合は「自動解析結果の
+                確認・対応付け」で警告し、確認をやり直せるようにしています）。
+              </p>
+            )}
             {n && <div className={`notice notice-${n.type}`}>{n.text}</div>}
             <div>
               <input
