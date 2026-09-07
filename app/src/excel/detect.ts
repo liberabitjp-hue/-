@@ -6,14 +6,23 @@ import { detectFractionsTable } from './detectors/fractionsTable'
 import { detectOutputTemplate } from './detectors/outputTemplate'
 import { findAllCells, findCell } from './detectors/shared'
 
-export function detectFields(wb: ParsedWorkbook): FieldDetection[] {
+/** Context from the active class profile (step 1), used to narrow what the
+ *  mapping screen shows: no need to review other grades' columns, or the
+ *  unit plan for a subject someone else teaches. */
+export interface DetectionContext {
+  grade?: string
+  /** Subject names (as registered in 分科教科と担当者) the homeroom teacher does NOT teach. */
+  excludedSubjects?: string[]
+}
+
+export function detectFields(wb: ParsedWorkbook, context: DetectionContext = {}): FieldDetection[] {
   switch (wb.fileKind) {
     case 'fixedTimetable':
       return detectFixedTimetable(wb)
     case 'classHoursEvents':
-      return detectClassHoursEvents(wb)
+      return detectClassHoursEvents(wb, context)
     case 'annualPlan':
-      return detectAnnualPlan(wb)
+      return detectAnnualPlan(wb, context)
     case 'outputTemplate':
       return detectOutputTemplate(wb)
     case 'fractionsTable':

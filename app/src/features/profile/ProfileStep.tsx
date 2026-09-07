@@ -7,7 +7,7 @@ function makeId(fiscalYear: number, grade: string, className: string): string {
 }
 
 export function ProfileStep() {
-  const { activeProfile, profiles, saveProfile, selectProfile } = useAppState()
+  const { activeProfile, profiles, saveProfile, selectProfile, setCurrentStep } = useAppState()
 
   const [fiscalYear, setFiscalYear] = useState<number>(new Date().getFullYear())
   const [grade, setGrade] = useState('')
@@ -49,6 +49,8 @@ export function ProfileStep() {
     }
     await saveProfile(profile)
     setSavedAt(now)
+    // 入力が完了したら、選択を待たず次の段階（ファイル取込み）へ自動で進める。
+    setCurrentStep('import')
   }
 
   const handleNewClass = () => {

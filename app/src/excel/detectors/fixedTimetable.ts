@@ -94,32 +94,8 @@ function detectSheet(sheet: SheetSnapshot): FieldDetection[] {
     }
   }
 
-  // 3. 分科計画 sub-table (学級ごとの分科担当・時数一覧), if present.
-  const planHeader = findCell(sheet, /分科\s*計画/, { rowFrom: gridLastRow })
-  if (planHeader) {
-    const headerRow = planHeader.row + 1
-    let lastRow = headerRow
-    for (let r = headerRow + 1; r < sheet.rows.length; r++) {
-      const rowHasData = sheet.rows[r].some((v) => !isBlank(v))
-      if (!rowHasData) break
-      lastRow = r
-    }
-    const lastCol = Math.max(0, ...sheet.rows[headerRow].map((v, c) => (isBlank(v) ? -1 : c)))
-    const sampleRows = sheet.rows
-      .slice(headerRow + 1, Math.min(headerRow + 4, lastRow + 1))
-      .map((r) => r.filter((v) => !isBlank(v)).join(' / '))
-    out.push(
-      makeDetection(
-        'fixedTimetable.specialistPlan',
-        '分科担当一覧（学級×担当教科・時数）',
-        sheet.name,
-        rangeRef(headerRow, 0, lastRow, lastCol),
-        sampleRows,
-        'medium',
-        '学級ごとに、どの分科担当者が何時間その教科を受け持つかの一覧です。',
-      ),
-    )
-  }
+  // 学級ごとの分科担当・時数一覧（「分科計画」表）は、確認画面には不要という
+  // 利用者からの指示により検出しない（フェーズA仕様修正）。
 
   return out
 }

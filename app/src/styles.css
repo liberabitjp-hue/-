@@ -184,6 +184,20 @@ table.data-table th {
   border-color: #8ec9a1;
   background: #f4fbf6;
 }
+.file-kind-card.drag-over {
+  border-color: #2f6fed;
+  background: #eef4ff;
+  border-style: dashed;
+}
+.file-kind-dropzone {
+  border: 1px dashed #c7d0dc;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 .file-kind-card-head {
   display: flex;
   justify-content: space-between;
@@ -251,4 +265,49 @@ table.data-table th {
 
 .future-panel {
   color: #5b6674;
+}
+
+.sheet-preview-scroll {
+  max-height: 340px;
+  overflow: auto;
+  border: 1px solid #c7d0dc;
+  border-radius: 8px;
+}
+
+table.sheet-preview-table {
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+table.sheet-preview-table .sheet-preview-corner,
+table.sheet-preview-table .sheet-preview-colhead,
+table.sheet-preview-table .sheet-preview-rowhead {
+  position: sticky;
+  background: #f7f9fc;
+  border: 1px solid #e1e6ee;
+  padding: 3px 6px;
+  font-weight: 700;
+  color: #5b6674;
+  z-index: 1;
+}
+table.sheet-preview-table .sheet-preview-corner {
+  top: 0;
+  left: 0;
+  z-index: 2;
+}
+table.sheet-preview-table .sheet-preview-colhead {
+  top: 0;
+}
+table.sheet-preview-table .sheet-preview-rowhead {
+  left: 0;
+}
+.sheet-preview-cell {
+  border: 1px solid #eef1f6;
+  padding: 3px 8px;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sheet-preview-hit {
+  background: #fff3b0;
 }

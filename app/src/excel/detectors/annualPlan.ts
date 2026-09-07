@@ -1,15 +1,35 @@
 import type { FieldDetection, ParsedWorkbook, SheetSnapshot } from '../../types'
+import type { DetectionContext } from '../detect'
 import { findAllCells, findCell, isBlank, makeDetection, normalize, numericRatio, rangeRef, sampleColumn } from './shared'
 
 function compact(v: unknown): string {
   return normalize(v as never).replace(/\s+/g, '')
 }
 
+/** シート名から教科名だけを取り出す。「国語５年」「音楽 5年」「書写５年 」等、
+ *  末尾の学年表記・余分な空白はまちまちなので、末尾の数字＋「年」以降を取り除く。 */
+function subjectNameFromSheetName(name: string): string {
+  return name.replace(/[０-９0-9]+\s*年.*$/, '').trim()
+}
+
+function isExcludedSubject(sheetName: string, excludedSubjects: string[]): boolean {
+  const subject = subjectNameFromSheetName(sheetName)
+  if (!subject) return false
+  return excludedSubjects.some((ex) => {
+    const t = ex.trim()
+    return t !== '' && (subject.includes(t) || t.includes(subject))
+  })
+}
+
 /** 年間指導計画案 相当。教科ごとにシートが分かれ、列位置は教科によって揺れるため、
- *  各シートで見出し語から候補列を推測し、確度付きで提示する。 */
-export function detectAnnualPlan(wb: ParsedWorkbook): FieldDetection[] {
+ *  各シートで見出し語から候補列を推測し、確度付きで提示する。担任が自分で教えない
+ *  教科（分科教科と担当者に登録済み）のシートは、確認対象から除外する
+ *  （その教科の単元進度は、分科担当者自身の資料から別途取り込む想定のため）。 */
+export function detectAnnualPlan(wb: ParsedWorkbook, context: DetectionContext = {}): FieldDetection[] {
   const out: FieldDetection[] = []
+  const excludedSubjects = context.excludedSubjects ?? []
   for (const sheet of wb.sheets) {
+    if (isExcludedSubject(sheet.name, excludedSubjects)) continue
     out.push(...detectSheet(sheet))
   }
   return out

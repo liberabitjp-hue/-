@@ -12,8 +12,12 @@ import {
 const PERIOD_RE = /^\d+校時$/
 const MONTH_SHEET_RE = /^\d{1,2}月$/
 
-/** 出力先ひな型（月案 .xlsm）相当。月ごとのシート（曜日×校時の表）と、
- *  年間の教科別予定時数表（"予定表"シート相当）を検出する。 */
+/** 出力先ひな型（月案 .xlsm）相当。月ごとのシート（曜日×校時の表）を検出する。
+ *
+ *  「予定表」シート（年度・学級名・月別教科別予定時数）は、アップロード前に
+ *  利用者自身が入力を終えている前提の資料のため、確認画面には出さない
+ *  （利用者からの指示: フェーズA仕様修正）。生成ロジック（フェーズB以降）が
+ *  必要とする際は、保存済みのシート内容から都度読み直せばよい。 */
 export function detectOutputTemplate(wb: ParsedWorkbook): FieldDetection[] {
   const out: FieldDetection[] = []
 
@@ -33,14 +37,7 @@ export function detectOutputTemplate(wb: ParsedWorkbook): FieldDetection[] {
   const representative = monthSheets[0]
   if (representative) out.push(...detectMonthSheetLayout(representative))
 
-  const planSheet = wb.sheets.find((s) => s.name === '予定表') ?? findPlanSheetByShape(wb.sheets)
-  if (planSheet) out.push(...detectPlanSheet(planSheet))
-
   return out
-}
-
-function findPlanSheetByShape(sheets: SheetSnapshot[]): SheetSnapshot | undefined {
-  return sheets.find((s) => findAllCells(s, MONTH_SHEET_RE, { rowTo: 3 }).length >= 6)
 }
 
 function detectMonthSheetLayout(sheet: SheetSnapshot): FieldDetection[] {
@@ -110,66 +107,6 @@ function detectMonthSheetLayout(sheet: SheetSnapshot): FieldDetection[] {
         sampleColumn(sheet, dismissalHeader.col, dataFrom, dataTo).filter((v) => !isBlank(v)),
         'high',
         'コピー範囲「下校時刻をコピー」で使う列です。',
-      ),
-    )
-  }
-
-  return out
-}
-
-function detectPlanSheet(sheet: SheetSnapshot): FieldDetection[] {
-  const out: FieldDetection[] = []
-
-  const yearCell = findCell(sheet, /^(19|20)\d{2}$/, { rowTo: 2 })
-  if (yearCell) {
-    out.push(
-      makeDetection('outputTemplate.plan.year', '年度', sheet.name, rangeRef(yearCell.row, yearCell.col, yearCell.row, yearCell.col), [yearCell.text], 'high'),
-    )
-  }
-  const classCell = findCell(sheet, /^\d+年\d+組$/, { rowTo: 2 })
-  if (classCell) {
-    out.push(
-      makeDetection('outputTemplate.plan.className', '学年・組', sheet.name, rangeRef(classCell.row, classCell.col, classCell.row, classCell.col), [classCell.text], 'high'),
-    )
-  }
-
-  const monthHeaders = findAllCells(sheet, MONTH_SHEET_RE, { rowTo: 3 })
-  if (monthHeaders.length > 0) {
-    const headerRow = monthHeaders[0].row
-    const subjectRows: number[] = []
-    for (let r = headerRow + 1; r < sheet.rows.length; r++) {
-      const label = sheet.rows[r]?.[1] // column B
-      if (!isBlank(label) && typeof label === 'string') subjectRows.push(r)
-      // Stop once we've collected the 教科+特別活動 block and hit a long empty gap.
-      if (subjectRows.length > 0 && r - subjectRows[subjectRows.length - 1] > 3) break
-    }
-    const firstCol = Math.min(...monthHeaders.map((m) => m.col))
-    const lastCol = Math.max(...monthHeaders.map((m) => m.col))
-    const lastRow = subjectRows[subjectRows.length - 1] ?? headerRow
-    const sample = subjectRows.slice(0, 6).map((r) => {
-      const name = String(sheet.rows[r][1])
-      const vals = monthHeaders.slice(0, 4).map((m) => sheet.rows[r][m.col])
-      return `${name}: ${vals.join(', ')}...`
-    })
-    out.push(
-      makeDetection(
-        'outputTemplate.plan.subjectMonthlyTargets',
-        '月別・教科等別 予定時数表',
-        sheet.name,
-        rangeRef(headerRow, 1, lastRow, lastCol),
-        sample,
-        'high',
-        '各月シートのT列相当の「予定」は、この表を数式で参照しています。この表を予定時数の基準とします。',
-      ),
-    )
-    out.push(
-      makeDetection(
-        'outputTemplate.plan.monthColumns',
-        '月の並び（列）',
-        sheet.name,
-        rangeRef(headerRow, firstCol, headerRow, lastCol),
-        monthHeaders.map((m) => m.text),
-        'high',
       ),
     )
   }

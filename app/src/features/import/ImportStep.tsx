@@ -25,6 +25,7 @@ export function ImportStep() {
   const { workbooks, mappings, saveWorkbook } = useAppState()
   const [busy, setBusy] = useState<FileKind | null>(null)
   const [notice, setNotice] = useState<Partial<Record<FileKind, { type: 'warn' | 'error'; text: string }>>>({})
+  const [dragOver, setDragOver] = useState<FileKind | null>(null)
   const inputRefs = useRef<Partial<Record<FileKind, HTMLInputElement | null>>>({})
 
   const handleFile = async (kind: FileKind, file: File | undefined) => {
@@ -77,7 +78,20 @@ export function ImportStep() {
         const wb = workbooks[kind]
         const n = notice[kind]
         return (
-          <div className={`file-kind-card${wb ? ' imported' : ''}`} key={kind}>
+          <div
+            className={`file-kind-card${wb ? ' imported' : ''}${dragOver === kind ? ' drag-over' : ''}`}
+            key={kind}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragOver(kind)
+            }}
+            onDragLeave={() => setDragOver((prev) => (prev === kind ? null : prev))}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragOver(null)
+              void handleFile(kind, e.dataTransfer.files?.[0])
+            }}
+          >
             <div className="file-kind-card-head">
               <span className="file-kind-name">{FILE_KIND_LABELS[kind]}</span>
               <span className="file-kind-status">
@@ -95,7 +109,7 @@ export function ImportStep() {
               </p>
             )}
             {n && <div className={`notice notice-${n.type}`}>{n.text}</div>}
-            <div>
+            <div className="file-kind-dropzone">
               <input
                 ref={(el) => {
                   inputRefs.current[kind] = el
@@ -105,6 +119,7 @@ export function ImportStep() {
                 disabled={busy === kind}
                 onChange={(e) => void handleFile(kind, e.target.files?.[0])}
               />
+              <span className="helptext">ここにファイルをドラッグ＆ドロップしても取り込めます。</span>
               {busy === kind && <span className="helptext"> 読み込み中...</span>}
             </div>
           </div>

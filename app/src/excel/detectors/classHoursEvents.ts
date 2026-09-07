@@ -1,8 +1,11 @@
 import type { FieldDetection, ParsedWorkbook, SheetSnapshot } from '../../types'
+import type { DetectionContext } from '../detect'
 import { findCell, isBlank, makeDetection, normalize, rangeRef, sampleColumn } from './shared'
 
-/** 授業時数･下校予定時刻 相当: 月ごとのシートから、日/曜/学年別時数/下校時刻/行事等を検出する。 */
-export function detectClassHoursEvents(wb: ParsedWorkbook): FieldDetection[] {
+/** 授業時数･下校予定時刻 相当: 月ごとのシートから、日/曜/学年別時数/下校時刻/行事等を検出する。
+ *  学年別の列は、担当学級の学年（context.grade）だけを表示する。全学年分を見せても
+ *  確認の手間が増えるだけで、他学年の列は使わないため（利用者からの指示）。 */
+export function detectClassHoursEvents(wb: ParsedWorkbook, context: DetectionContext = {}): FieldDetection[] {
   const out: FieldDetection[] = []
 
   const monthOf = (sheet: SheetSnapshot): number | null => {
@@ -16,7 +19,7 @@ export function detectClassHoursEvents(wb: ParsedWorkbook): FieldDetection[] {
   // Pick one representative, well-formed sheet to detect the shared column layout from.
   const representative = wb.sheets.find((s) => findCell(s, /^曜$/, { rowTo: 5 }))
   if (representative) {
-    out.push(...detectColumns(representative))
+    out.push(...detectColumns(representative, context.grade))
   }
 
   // Which sheet is the real timetable for each calendar month? This file commonly
@@ -78,7 +81,7 @@ export function detectClassHoursEvents(wb: ParsedWorkbook): FieldDetection[] {
 
 const GRADE_RE = /^(\d{1,2})学年$/
 
-function detectColumns(sheet: SheetSnapshot): FieldDetection[] {
+function detectColumns(sheet: SheetSnapshot, grade?: string): FieldDetection[] {
   const out: FieldDetection[] = []
   const headerRowIdx = findCell(sheet, /^曜$/, { rowTo: 5 })?.row
   if (headerRowIdx == null) return out
@@ -88,6 +91,7 @@ function detectColumns(sheet: SheetSnapshot): FieldDetection[] {
   const dataFrom = headerRowIdx + 1
   const noteRow = findCell(sheet, /留意点/, { rowFrom: dataFrom, colTo: 1 })?.row
   const dataTo = (noteRow ?? dataFrom + 32) - 1
+  const targetGrade = grade?.trim()
 
   if (dayCol != null) {
     out.push(
@@ -99,6 +103,7 @@ function detectColumns(sheet: SheetSnapshot): FieldDetection[] {
     const m = GRADE_RE.exec(normalize(v))
     if (!m) return
     const grade = m[1]
+    if (targetGrade && grade !== targetGrade) return // 担当学年のみ表示
     out.push(
       makeDetection(
         `classHoursEvents.hours.${grade}`,
