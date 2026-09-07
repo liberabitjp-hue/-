@@ -109,6 +109,12 @@ export interface FileMapping {
   sourceFileName: string
   detections: FieldDetection[]
   confirmedAt: string
+  /** Stamped with DETECTOR_VERSION (excel/detect.ts) at confirm time. A mapping
+   *  saved under an older version is treated like a format change - re-detected
+   *  and re-confirmed - so an app update to the detection logic (e.g. adding a
+   *  grade filter) doesn't get silently masked by an old cached mapping that
+   *  still matches the file's fingerprint (the file itself hasn't changed). */
+  detectorVersion?: number
 }
 
 export const STEP_IDS = [

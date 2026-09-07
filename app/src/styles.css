@@ -45,6 +45,9 @@ body {
   padding: 24px 32px 64px;
   max-width: 980px;
 }
+.app-main.app-main-wide {
+  max-width: 1400px;
+}
 
 .panel {
   background: #ffffff;
@@ -267,8 +270,26 @@ table.data-table th {
   color: #5b6674;
 }
 
+.mapping-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+.mapping-main-col {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mapping-preview-col {
+  width: 420px;
+  flex: 0 0 420px;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+
 .sheet-preview-scroll {
-  max-height: 340px;
+  max-height: calc(100vh - 120px);
   overflow: auto;
   border: 1px solid #c7d0dc;
   border-radius: 8px;

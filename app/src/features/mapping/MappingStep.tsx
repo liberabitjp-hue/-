@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppState } from '../../state/AppStateContext'
 import { ALL_FILE_KINDS, CONFIDENCE_LABEL, FILE_KIND_LABELS } from '../../types'
 import type { FieldDetection, FileKind, ParsedWorkbook, SheetSnapshot } from '../../types'
-import { detectFields } from '../../excel/detect'
+import { detectFields, DETECTOR_VERSION } from '../../excel/detect'
 import type { DetectionContext } from '../../excel/detect'
 import { colLetter } from '../../excel/detectors/shared'
-import { parseRangeRef } from '../../excel/rangeUtil'
+import { buildMergeMap, parseRangeRef } from '../../excel/rangeUtil'
 import type { CellRange } from '../../excel/rangeUtil'
 
 interface EditableDetection extends FieldDetection {
@@ -18,8 +18,9 @@ function seedFromComputed(detections: FieldDetection[]): EditableDetection[] {
 }
 
 /** Detections loaded from a mapping the user already confirmed once (same file
- *  shape) - confirming them the first time *was* the review, so don't force
- *  re-checking a low-confidence row every time this screen is reopened. */
+ *  shape, same detector version) - confirming them the first time *was* the
+ *  review, so don't force re-checking a low-confidence row every time this
+ *  screen is reopened. */
 function seedFromSaved(detections: FieldDetection[]): EditableDetection[] {
   return detections.map((d) => ({ ...d, acknowledged: true }))
 }
@@ -37,11 +38,20 @@ function newCustomKey(): string {
   return `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+interface PreviewTarget {
+  wb: ParsedWorkbook
+  sheetName: string
+  rangeRef: string
+}
+
 /** A live, scrollable view of one sheet's cells, with the currently-selected
  *  detection's range highlighted - so "is this really the 単元名 column?" can
- *  be answered by looking at the sheet instead of trusting 4 sample values. */
+ *  be answered by looking at the sheet instead of trusting 4 sample values.
+ *  Merged cells are rendered as real colSpan/rowSpan so the layout resembles
+ *  the actual spreadsheet instead of one uniform box per cell. */
 function SheetPreview({ sheet, range }: { sheet: SheetSnapshot; range: CellRange | null }) {
   const anchorRef = useRef<HTMLTableCellElement | null>(null)
+  const mergeMap = useMemo(() => buildMergeMap(sheet.merges), [sheet])
 
   useEffect(() => {
     anchorRef.current?.scrollIntoView({ block: 'center', inline: 'center' })
@@ -67,14 +77,20 @@ function SheetPreview({ sheet, range }: { sheet: SheetSnapshot; range: CellRange
             <tr key={r}>
               <th className="sheet-preview-rowhead">{r + 1}</th>
               {Array.from({ length: colCount }).map((_, c) => {
+                const merge = mergeMap.get(`${r}:${c}`)
+                if (merge === 'skip') return null
                 const v = row[c]
                 const inRange = !!range && r >= range.r0 && r <= range.r1 && c >= range.c0 && c <= range.c1
                 const isAnchor = !!range && r === range.r0 && c === range.c0
+                const isNumeric = typeof v === 'number'
                 return (
                   <td
                     key={c}
                     ref={isAnchor ? anchorRef : undefined}
+                    rowSpan={merge ? merge.rowSpan : undefined}
+                    colSpan={merge ? merge.colSpan : undefined}
                     className={inRange ? 'sheet-preview-cell sheet-preview-hit' : 'sheet-preview-cell'}
+                    style={isNumeric ? { textAlign: 'right' } : undefined}
                   >
                     {v == null ? '' : String(v)}
                   </td>
@@ -139,31 +155,42 @@ function AddCustomRow({ wb, onAdd }: { wb: ParsedWorkbook; onAdd: (d: EditableDe
 
 const MIXED_CONTENT_KINDS: FileKind[] = ['outputTemplate']
 
-function FileMappingPanel({ kind, context }: { kind: FileKind; context: DetectionContext }) {
+function FileMappingPanel({
+  kind,
+  context,
+  onPreview,
+}: {
+  kind: FileKind
+  context: DetectionContext
+  onPreview: (target: PreviewTarget) => void
+}) {
   const { workbooks, mappings, saveMapping } = useAppState()
   const wb = workbooks[kind]
   const existingMapping = mappings[kind]
+  const isStale = !!(
+    existingMapping &&
+    existingMapping.fingerprint === wb?.fingerprint &&
+    existingMapping.detectorVersion !== DETECTOR_VERSION
+  )
 
   const computed = useMemo(() => (wb ? detectFields(wb, context) : []), [wb, context])
   const [items, setItems] = useState<EditableDetection[]>([])
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [expandedSheets, setExpandedSheets] = useState<Set<string>>(new Set())
-  const [preview, setPreview] = useState<{ sheetName: string; rangeRef: string } | null>(null)
 
   useEffect(() => {
     if (!wb) {
       setItems([])
       return
     }
-    if (existingMapping && existingMapping.fingerprint === wb.fingerprint) {
+    if (existingMapping && existingMapping.fingerprint === wb.fingerprint && existingMapping.detectorVersion === DETECTOR_VERSION) {
       setItems(seedFromSaved(existingMapping.detections))
     } else {
       setItems(seedFromComputed(computed))
     }
     setExpandedSheets(new Set())
-    setPreview(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wb?.fingerprint])
+  }, [wb?.fingerprint, computed])
 
   if (!wb) {
     return (
@@ -197,12 +224,10 @@ function FileMappingPanel({ kind, context }: { kind: FileKind; context: Detectio
       sourceFileName: wb.fileName,
       detections: items.map(({ acknowledged: _a, ...d }) => d),
       confirmedAt: new Date().toISOString(),
+      detectorVersion: DETECTOR_VERSION,
     })
     setSavedAt(new Date().toISOString())
   }
-
-  const previewSheet = preview ? wb.sheets.find((s) => s.name === preview.sheetName) : undefined
-  const previewRange = preview ? parseRangeRef(preview.rangeRef) : null
 
   return (
     <div className="panel">
@@ -224,7 +249,13 @@ function FileMappingPanel({ kind, context }: { kind: FileKind; context: Detectio
           内容をもう一度確認してから確定し直してください。
         </div>
       )}
-      {existingMapping && !formatChanged && (
+      {isStale && (
+        <div className="notice notice-warn">
+          アプリの更新により、自動判定の内容が新しくなりました（ファイルの中身は変わっていません）。
+          最新の判定結果を表示しています。内容を確認し、確定し直してください。
+        </div>
+      )}
+      {existingMapping && !formatChanged && !isStale && (
         <div className="notice notice-info">
           この内容は {new Date(existingMapping.confirmedAt).toLocaleString('ja-JP')} に確定済みです。
           必要であれば修正して再確定できます。
@@ -236,18 +267,6 @@ function FileMappingPanel({ kind, context }: { kind: FileKind; context: Detectio
           このファイルから自動判定できる項目が見つかりませんでした。ファイルの中身とファイル種別の対応が正しいか、
           「ファイル取込み」画面で確認してください。下の欄から手動で項目を追加することもできます。
         </p>
-      )}
-
-      {previewSheet && (
-        <div className="mapping-group">
-          <div className="mapping-group-title">
-            シートプレビュー: {preview!.sheetName}
-            <button type="button" className="btn btn-secondary" style={{ marginLeft: 10 }} onClick={() => setPreview(null)}>
-              閉じる
-            </button>
-          </div>
-          <SheetPreview sheet={previewSheet} range={previewRange} />
-        </div>
       )}
 
       {groupBySheet(items).map(([sheetName, group]) => {
@@ -316,7 +335,7 @@ function FileMappingPanel({ kind, context }: { kind: FileKind; context: Detectio
                                 type="button"
                                 className="btn btn-secondary"
                                 title="この範囲をシート上で見る"
-                                onClick={() => setPreview({ sheetName: item.sheetName, rangeRef: item.rangeRef })}
+                                onClick={() => onPreview({ wb, sheetName: item.sheetName, rangeRef: item.rangeRef })}
                               >
                                 表示
                               </button>
@@ -383,6 +402,7 @@ function FileMappingPanel({ kind, context }: { kind: FileKind; context: Detectio
 export function MappingStep() {
   const { workbooks, activeProfile } = useAppState()
   const importedKinds = ALL_FILE_KINDS.filter((k) => workbooks[k])
+  const [preview, setPreview] = useState<PreviewTarget | null>(null)
 
   const context: DetectionContext = useMemo(
     () => ({
@@ -392,23 +412,47 @@ export function MappingStep() {
     [activeProfile],
   )
 
+  const previewSheet = preview ? preview.wb.sheets.find((s) => s.name === preview.sheetName) : undefined
+  const previewRange = preview ? parseRangeRef(preview.rangeRef) : null
+
   return (
-    <div>
-      <div className="panel">
-        <h2>3. 自動解析結果の確認・対応付け</h2>
-        <p className="helptext">
-          取り込んだファイルごとに、システムが自動判定したシート・見出し・セル範囲を確認します。
-          範囲の横の「表示」ボタンで、実際のシート上のどこを指しているか確認できます。すべて高い確度で
-          判定できたシートは折りたたんで表示しているので、確認が必要な項目に集中できます。ここで確定した
-          内容は「学校別書式設定」として保存され、次回以降も再利用されます。
-        </p>
-        {importedKinds.length === 0 && (
-          <p className="helptext">まだファイルが取り込まれていません。先に「ファイル取込み」を行ってください。</p>
-        )}
+    <div className="mapping-layout">
+      <div className="mapping-main-col">
+        <div className="panel">
+          <h2>3. 自動解析結果の確認・対応付け</h2>
+          <p className="helptext">
+            取り込んだファイルごとに、システムが自動判定したシート・見出し・セル範囲を確認します。
+            範囲の横の「表示」ボタンで、右側にシートの実物を表示し、該当セル範囲を確認できます。すべて高い
+            確度で判定できたシートは折りたたんで表示しているので、確認が必要な項目に集中できます。ここで
+            確定した内容は「学校別書式設定」として保存され、次回以降も再利用されます。
+          </p>
+          {importedKinds.length === 0 && (
+            <p className="helptext">まだファイルが取り込まれていません。先に「ファイル取込み」を行ってください。</p>
+          )}
+        </div>
+        {ALL_FILE_KINDS.map((kind) => (
+          <FileMappingPanel kind={kind} context={context} onPreview={setPreview} key={kind} />
+        ))}
       </div>
-      {ALL_FILE_KINDS.map((kind) => (
-        <FileMappingPanel kind={kind} context={context} key={kind} />
-      ))}
+      <div className="mapping-preview-col">
+        <div className="panel" style={{ marginBottom: 0 }}>
+          {previewSheet ? (
+            <>
+              <div className="mapping-group-title">
+                シートプレビュー: {preview!.sheetName}
+                <button type="button" className="btn btn-secondary" style={{ marginLeft: 10 }} onClick={() => setPreview(null)}>
+                  閉じる
+                </button>
+              </div>
+              <SheetPreview sheet={previewSheet} range={previewRange} />
+            </>
+          ) : (
+            <p className="helptext">
+              項目の横の「表示」ボタンを押すと、ここに実際のシートが表示され、該当セル範囲がハイライトされます。
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

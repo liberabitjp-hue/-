@@ -6,6 +6,13 @@ import { detectFractionsTable } from './detectors/fractionsTable'
 import { detectOutputTemplate } from './detectors/outputTemplate'
 import { findAllCells, findCell } from './detectors/shared'
 
+/** Bump this whenever a detector's logic changes in a way that would produce
+ *  different FieldDetection output for the same file (a new filter, a fixed
+ *  bug, a new field). A FileMapping saved under an older version is treated
+ *  as stale even if the file's own fingerprint hasn't changed, so an app
+ *  update is never silently masked by a previously-confirmed mapping. */
+export const DETECTOR_VERSION = 2
+
 /** Context from the active class profile (step 1), used to narrow what the
  *  mapping screen shows: no need to review other grades' columns, or the
  *  unit plan for a subject someone else teaches. */

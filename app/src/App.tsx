@@ -3,6 +3,7 @@ import type { StepStatus } from './components/Stepper'
 import { useAppState } from './state/AppStateContext'
 import { ALL_FILE_KINDS, STEP_IDS, STEP_PHASE } from './types'
 import type { StepId } from './types'
+import { DETECTOR_VERSION } from './excel/detect'
 import { ProfileStep } from './features/profile/ProfileStep'
 import { ImportStep } from './features/import/ImportStep'
 import { MappingStep } from './features/mapping/MappingStep'
@@ -61,7 +62,7 @@ export default function App() {
   const mappingConfirmedCount = ALL_FILE_KINDS.filter((k) => {
     const wb = workbooks[k]
     const m = mappings[k]
-    return wb && m && m.fingerprint === wb.fingerprint
+    return wb && m && m.fingerprint === wb.fingerprint && m.detectorVersion === DETECTOR_VERSION
   }).length
 
   const statuses = computeStatuses(
@@ -92,7 +93,7 @@ export default function App() {
         )}
         <Stepper current={currentStep} statuses={statuses} onSelect={setCurrentStep} />
       </aside>
-      <main className="app-main">
+      <main className={`app-main${currentStep === 'mapping' ? ' app-main-wide' : ''}`}>
         <StepContent stepId={currentStep} />
       </main>
     </div>

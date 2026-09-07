@@ -21,6 +21,30 @@ function colToIndex(col: string): number {
   return n - 1
 }
 
+export type MergeInfo = { rowSpan: number; colSpan: number } | 'skip'
+
+/** Maps "r:c" (0-based) to merge info, so a preview table can render the sheet's
+ *  actual merged cells (colSpan/rowSpan on the anchor, nothing at all for the
+ *  cells the merge covers) instead of one uniform box per cell - which looks
+ *  nothing like the source spreadsheet once headers span multiple columns. */
+export function buildMergeMap(merges: string[]): Map<string, MergeInfo> {
+  const map = new Map<string, MergeInfo>()
+  for (const m of merges) {
+    const range = parseRangeRef(m)
+    if (!range) continue
+    const { r0, c0, r1, c1 } = range
+    if (r0 === r1 && c0 === c1) continue // a 1x1 "merge" needs no special handling
+    map.set(`${r0}:${c0}`, { rowSpan: r1 - r0 + 1, colSpan: c1 - c0 + 1 })
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        if (r === r0 && c === c0) continue
+        map.set(`${r}:${c}`, 'skip')
+      }
+    }
+  }
+  return map
+}
+
 export function parseRangeRef(ref: string): CellRange | null {
   const trimmed = ref.trim()
   if (!trimmed) return null

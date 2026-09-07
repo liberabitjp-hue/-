@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import type { DragEvent } from 'react'
 import { useAppState } from '../../state/AppStateContext'
 import { ALL_FILE_KINDS, FILE_KIND_LABELS } from '../../types'
 import type { FileKind } from '../../types'
@@ -21,15 +22,34 @@ function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('ja-JP')
 }
 
+/** `dataTransfer.files` is usually populated for a real OS file drop, but some
+ *  sources (an email attachment, a compressed-folder view, certain Windows
+ *  drag sessions) only populate `.items`, where the File must be pulled out
+ *  via `getAsFile()`. Try both so a "the UI reacts but nothing loads" drop
+ *  isn't silently swallowed. */
+function extractDroppedFile(dt: DataTransfer | null): File | undefined {
+  if (!dt) return undefined
+  if (dt.files && dt.files.length > 0) return dt.files[0]
+  if (dt.items) {
+    for (let i = 0; i < dt.items.length; i++) {
+      const item = dt.items[i]
+      if (item.kind === 'file') {
+        const f = item.getAsFile()
+        if (f) return f
+      }
+    }
+  }
+  return undefined
+}
+
 export function ImportStep() {
-  const { workbooks, mappings, saveWorkbook } = useAppState()
+  const { workbooks, mappings, saveWorkbook, setCurrentStep } = useAppState()
   const [busy, setBusy] = useState<FileKind | null>(null)
   const [notice, setNotice] = useState<Partial<Record<FileKind, { type: 'warn' | 'error'; text: string }>>>({})
   const [dragOver, setDragOver] = useState<FileKind | null>(null)
   const inputRefs = useRef<Partial<Record<FileKind, HTMLInputElement | null>>>({})
 
-  const handleFile = async (kind: FileKind, file: File | undefined) => {
-    if (!file) return
+  const processFile = async (kind: FileKind, file: File) => {
     setBusy(kind)
     setNotice((prev) => ({ ...prev, [kind]: undefined }))
     try {
@@ -56,6 +76,12 @@ export function ImportStep() {
           },
         }))
       }
+
+      // 5つすべて取り込めたら、選択操作を挟まず自動的に確認画面へ進める。
+      const nowImportedKinds = new Set(ALL_FILE_KINDS.filter((k) => k === kind || workbooks[k]))
+      if (nowImportedKinds.size === ALL_FILE_KINDS.length) {
+        setCurrentStep('mapping')
+      }
     } catch (err) {
       setNotice((prev) => ({
         ...prev,
@@ -64,6 +90,33 @@ export function ImportStep() {
     } finally {
       setBusy(null)
     }
+  }
+
+  // ファイル選択ダイアログ経由: 選択せずキャンセルした場合は file が undefined になるので、
+  // 何もせず静かに終える（エラー表示しない）。
+  const handleFilePicked = (kind: FileKind, file: File | undefined) => {
+    if (!file) return
+    void processFile(kind, file)
+  }
+
+  // ドラッグ＆ドロップ経由: ここで file を取り出せなかった場合は、キャンセルではなく
+  // 読み取り失敗なので、はっきりエラーを表示する（無反応のまま終わらせない）。
+  const handleDrop = (kind: FileKind, e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(null)
+    const file = extractDroppedFile(e.dataTransfer)
+    if (!file) {
+      setNotice((prev) => ({
+        ...prev,
+        [kind]: {
+          type: 'error',
+          text: 'ドロップされたファイルを読み取れませんでした。もう一度ドラッグするか、下の「ファイルを選択」からお試しください。',
+        },
+      }))
+      return
+    }
+    void processFile(kind, file)
   }
 
   return (
@@ -81,16 +134,23 @@ export function ImportStep() {
           <div
             className={`file-kind-card${wb ? ' imported' : ''}${dragOver === kind ? ' drag-over' : ''}`}
             key={kind}
-            onDragOver={(e) => {
+            onDragEnter={(e) => {
               e.preventDefault()
+              e.stopPropagation()
               setDragOver(kind)
             }}
-            onDragLeave={() => setDragOver((prev) => (prev === kind ? null : prev))}
-            onDrop={(e) => {
+            onDragOver={(e) => {
               e.preventDefault()
-              setDragOver(null)
-              void handleFile(kind, e.dataTransfer.files?.[0])
+              e.stopPropagation()
+              if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+              setDragOver(kind)
             }}
+            onDragLeave={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setDragOver((prev) => (prev === kind ? null : prev))
+            }}
+            onDrop={(e) => handleDrop(kind, e)}
           >
             <div className="file-kind-card-head">
               <span className="file-kind-name">{FILE_KIND_LABELS[kind]}</span>
@@ -117,7 +177,7 @@ export function ImportStep() {
                 type="file"
                 accept=".xlsx,.xlsm,.xls"
                 disabled={busy === kind}
-                onChange={(e) => void handleFile(kind, e.target.files?.[0])}
+                onChange={(e) => handleFilePicked(kind, e.target.files?.[0])}
               />
               <span className="helptext">ここにファイルをドラッグ＆ドロップしても取り込めます。</span>
               {busy === kind && <span className="helptext"> 読み込み中...</span>}
