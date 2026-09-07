@@ -2,6 +2,15 @@ import { useRef, useState } from 'react'
 import { exportAllData, importAllData } from '../../storage/db'
 import type { StoreName, Identified } from '../../storage/db'
 import { buildBackupPayload, validateBackupPayload } from '../../storage/backup'
+import { recordDiagnostic } from '../../diagnostics/diagnosticLog'
+
+const DIAGNOSTIC_STAGE = 'バックアップ・復元'
+
+/** エラー画面に、利用者向け説明と開発者向け識別コードを併記する（別紙4.7対応）。 */
+function withCode(message: string, code: string): string {
+  recordDiagnostic(DIAGNOSTIC_STAGE, code, message)
+  return `${message}（識別コード: ${code}）`
+}
 
 function downloadJson(payload: unknown, filenamePrefix: string): void {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
@@ -30,7 +39,7 @@ export function BackupPanel() {
       downloadJson(buildBackupPayload(data), '月案アプリ_バックアップ')
       setMessage({ type: 'info', text: 'バックアップファイルを書き出しました。' })
     } catch (err) {
-      setMessage({ type: 'error', text: `書き出しに失敗しました: ${(err as Error).message}` })
+      setMessage({ type: 'error', text: withCode(`書き出しに失敗しました: ${(err as Error).message}`, 'BACKUP_EXPORT_FAILED') })
     } finally {
       setBusy(false)
     }
@@ -48,7 +57,10 @@ export function BackupPanel() {
       } catch {
         setMessage({
           type: 'error',
-          text: 'ファイルの中身がJSON形式として読み取れませんでした。壊れているか、別の種類のファイルの可能性があります。現在のデータは変更していません。',
+          text: withCode(
+            'ファイルの中身がJSON形式として読み取れませんでした。壊れているか、別の種類のファイルの可能性があります。現在のデータは変更していません。',
+            'BACKUP_INVALID_JSON',
+          ),
         })
         return
       }
@@ -59,7 +71,7 @@ export function BackupPanel() {
       if (!validation.ok) {
         setMessage({
           type: 'error',
-          text: `${validation.reason}（現在のデータは変更していません。）`,
+          text: withCode(`${validation.reason}（現在のデータは変更していません。）`, validation.code),
         })
         return
       }
@@ -81,7 +93,7 @@ export function BackupPanel() {
         text: `バックアップを復元しました。ページを再読み込みすると反映されます。復元前の状態は自動的に別ファイルとして書き出し済みです。${legacyNote}`,
       })
     } catch (err) {
-      setMessage({ type: 'error', text: `復元に失敗しました: ${(err as Error).message}` })
+      setMessage({ type: 'error', text: withCode(`復元に失敗しました: ${(err as Error).message}`, 'BACKUP_RESTORE_FAILED') })
     } finally {
       setBusy(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -97,7 +109,7 @@ export function BackupPanel() {
       setPreRestoreSnapshot(null)
       setMessage({ type: 'info', text: '復元直前の状態に戻しました。ページを再読み込みすると反映されます。' })
     } catch (err) {
-      setMessage({ type: 'error', text: `元に戻す処理に失敗しました: ${(err as Error).message}` })
+      setMessage({ type: 'error', text: withCode(`元に戻す処理に失敗しました: ${(err as Error).message}`, 'BACKUP_UNDO_FAILED') })
     } finally {
       setBusy(false)
     }

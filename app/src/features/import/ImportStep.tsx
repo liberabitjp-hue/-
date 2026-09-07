@@ -6,6 +6,16 @@ import type { FileKind } from '../../types'
 import { guessFileKind } from '../../excel/detect'
 import { getTruncatedSheetNames, parseWorkbookRaw, withFileKind } from '../../excel/workbookReader'
 import { checkFileBeforeParse, checkParsedWorkbook, describeParseError } from '../../excel/fileValidation'
+import { recordDiagnostic } from '../../diagnostics/diagnosticLog'
+
+const DIAGNOSTIC_STAGE = '②ファイル取込み'
+
+/** エラー画面に、利用者向け説明と開発者向け識別コードを併記する（別紙4.7対応）。
+ *  同時に、不具合調査用の診断ログにも記録する（児童名・ファイルの中身は記録しない）。 */
+function reportImportError(kind: FileKind, code: string, message: string): { type: 'error'; text: string } {
+  recordDiagnostic(`${DIAGNOSTIC_STAGE}（${kind}）`, code, message)
+  return { type: 'error', text: `${message}（識別コード: ${code}）` }
+}
 
 const FILE_KIND_HINTS: Record<FileKind, string> = {
   outputTemplate: '例: R8月案　５年２組.xlsm（出力先のひな型。マクロ付きでも読み込みだけなら問題ありません）',
@@ -58,7 +68,7 @@ export function ImportStep() {
       // 解析前に確認する。ここで弾かれた場合、保存処理には一切進まない。
       const preCheck = await checkFileBeforeParse(file)
       if (!preCheck.ok) {
-        setNotice((prev) => ({ ...prev, [kind]: { type: 'error', text: preCheck.reason! } }))
+        setNotice((prev) => ({ ...prev, [kind]: reportImportError(kind, preCheck.code!, preCheck.reason!) }))
         return
       }
 
@@ -66,13 +76,14 @@ export function ImportStep() {
       try {
         raw = await parseWorkbookRaw(file)
       } catch (err) {
-        setNotice((prev) => ({ ...prev, [kind]: { type: 'error', text: describeParseError(err) } }))
+        const info = describeParseError(err)
+        setNotice((prev) => ({ ...prev, [kind]: reportImportError(kind, info.code, info.message) }))
         return
       }
 
       const postCheck = checkParsedWorkbook(raw.sheets.length)
       if (!postCheck.ok) {
-        setNotice((prev) => ({ ...prev, [kind]: { type: 'error', text: postCheck.reason! } }))
+        setNotice((prev) => ({ ...prev, [kind]: reportImportError(kind, postCheck.code!, postCheck.reason!) }))
         return
       }
 
@@ -106,9 +117,10 @@ export function ImportStep() {
       }
     } catch (err) {
       // ここに来るのは事前検査・解析・分類のいずれにも当てはまらない想定外の失敗のみ。
+      const info = describeParseError(err)
       setNotice((prev) => ({
         ...prev,
-        [kind]: { type: 'error', text: describeParseError(err) },
+        [kind]: reportImportError(kind, info.code, info.message),
       }))
     } finally {
       setBusy(null)
@@ -132,10 +144,11 @@ export function ImportStep() {
     if (!file) {
       setNotice((prev) => ({
         ...prev,
-        [kind]: {
-          type: 'error',
-          text: 'ドロップされたファイルを読み取れませんでした。もう一度ドラッグするか、下の「ファイルを選択」からお試しください。',
-        },
+        [kind]: reportImportError(
+          kind,
+          'DROP_NO_FILE',
+          'ドロップされたファイルを読み取れませんでした。もう一度ドラッグするか、下の「ファイルを選択」からお試しください。',
+        ),
       }))
       return
     }

@@ -8,6 +8,8 @@ import { ProfileStep } from './features/profile/ProfileStep'
 import { ImportStep } from './features/import/ImportStep'
 import { MappingStep } from './features/mapping/MappingStep'
 import { PlaceholderStep } from './features/placeholder/PlaceholderStep'
+import { APP_VERSION } from './storage/backup'
+import { downloadDiagnosticReport } from './diagnostics/diagnosticLog'
 
 function computeStatuses(
   currentStep: StepId,
@@ -121,6 +123,14 @@ export default function App() {
           </div>
         )}
         <Stepper current={currentStep} statuses={statuses} onSelect={setCurrentStep} />
+        <div className="app-sidebar-footer">
+          <button type="button" className="btn btn-secondary" onClick={() => downloadDiagnosticReport(APP_VERSION)}>
+            診断情報を書き出す
+          </button>
+          <p className="helptext">
+            不具合が起きたときの原因調査用です。児童名・学級名・元Excelの内容は含まれません。押した場合のみファイルが作成されます（別紙4.7）。
+          </p>
+        </div>
       </aside>
       <main className={`app-main${currentStep === 'mapping' ? ' app-main-wide' : ''}`}>
         <StepContent

@@ -32,7 +32,8 @@ export interface BackupPayload {
 
 export type BackupValidation =
   | { ok: true; payload: BackupPayload; isLegacyFormat: boolean }
-  | { ok: false; reason: string }
+  // code: 開発者向けの短い識別コード（別紙4.7「診断情報の書出し」対応）。
+  | { ok: false; reason: string; code: string }
 
 const KNOWN_STORES = new Set<string>(Object.values(STORES))
 
@@ -42,24 +43,36 @@ const KNOWN_STORES = new Set<string>(Object.values(STORES))
  *  older app version can still restore a newer backup's compatible parts. */
 export function validateBackupPayload(raw: unknown): BackupValidation {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    return { ok: false, reason: 'ファイルの中身がバックアップの形式（JSONオブジェクト）ではありません。' }
+    return { ok: false, code: 'BACKUP_NOT_OBJECT', reason: 'ファイルの中身がバックアップの形式（JSONオブジェクト）ではありません。' }
   }
   const obj = raw as Record<string, unknown>
 
   const rawData = obj.data
   if (typeof rawData !== 'object' || rawData === null || Array.isArray(rawData)) {
-    return { ok: false, reason: '「data」の項目が見つからないか、形式が正しくありません。バックアップファイルではない可能性があります。' }
+    return {
+      ok: false,
+      code: 'BACKUP_NO_DATA_FIELD',
+      reason: '「data」の項目が見つからないか、形式が正しくありません。バックアップファイルではない可能性があります。',
+    }
   }
 
   const cleanedData: Partial<Record<StoreName, Identified[]>> = {}
   for (const [key, value] of Object.entries(rawData as Record<string, unknown>)) {
     if (!KNOWN_STORES.has(key)) continue // 将来の項目・不明な項目は無視する（拒否しない）
     if (!Array.isArray(value)) {
-      return { ok: false, reason: `「${key}」の中身が一覧（配列）になっていません。ファイルが壊れている可能性があります。` }
+      return {
+        ok: false,
+        code: 'BACKUP_STORE_NOT_ARRAY',
+        reason: `「${key}」の中身が一覧（配列）になっていません。ファイルが壊れている可能性があります。`,
+      }
     }
     for (const row of value) {
       if (typeof row !== 'object' || row === null || typeof (row as Record<string, unknown>).id !== 'string') {
-        return { ok: false, reason: `「${key}」の中に、idを持たないデータが含まれています。ファイルが壊れている可能性があります。` }
+        return {
+          ok: false,
+          code: 'BACKUP_ROW_NO_ID',
+          reason: `「${key}」の中に、idを持たないデータが含まれています。ファイルが壊れている可能性があります。`,
+        }
       }
     }
     cleanedData[key as StoreName] = value as Identified[]
