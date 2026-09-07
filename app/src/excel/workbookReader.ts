@@ -111,3 +111,19 @@ export function withFileKind(
 ): ParsedWorkbook {
   return { ...raw, fileKind }
 }
+
+/** True if this sheet's real dimensions exceeded the MAX_ROWS/MAX_COLS sampling
+ *  cap - `rowCount`/`colCount` hold the sheet's real size, while `rows` holds
+ *  only the (possibly smaller) sampled window. 別紙4.2「使用範囲が異常に
+ *  大きい場合は…説明する」への対応: 事故防止のため上限で打ち切ってはいるが、
+ *  黙って切り詰めるのではなく利用者に知らせる。 */
+export function isSheetTruncated(sheet: ParsedWorkbook['sheets'][number]): boolean {
+  const sampledRows = sheet.rows.length
+  const sampledCols = sheet.rows[0]?.length ?? 0
+  return sheet.rowCount > sampledRows || sheet.colCount > sampledCols
+}
+
+/** Names of every sheet in the workbook whose real size exceeded the sampling cap. */
+export function getTruncatedSheetNames(wb: ParsedWorkbook): string[] {
+  return wb.sheets.filter(isSheetTruncated).map((s) => s.name)
+}

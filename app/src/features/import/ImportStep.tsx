@@ -4,7 +4,8 @@ import { useAppState } from '../../state/AppStateContext'
 import { ALL_FILE_KINDS, FILE_KIND_LABELS } from '../../types'
 import type { FileKind } from '../../types'
 import { guessFileKind } from '../../excel/detect'
-import { parseWorkbookRaw, withFileKind } from '../../excel/workbookReader'
+import { getTruncatedSheetNames, parseWorkbookRaw, withFileKind } from '../../excel/workbookReader'
+import { checkFileBeforeParse, checkParsedWorkbook, describeParseError } from '../../excel/fileValidation'
 
 const FILE_KIND_HINTS: Record<FileKind, string> = {
   outputTemplate: '例: R8月案　５年２組.xlsm（出力先のひな型。マクロ付きでも読み込みだけなら問題ありません）',
@@ -53,28 +54,49 @@ export function ImportStep() {
     setBusy(kind)
     setNotice((prev) => ({ ...prev, [kind]: undefined }))
     try {
-      const raw = await parseWorkbookRaw(file)
+      // 別紙4.2: 拡張子だけでなく、実際にExcelとして読める見込みがあるかを
+      // 解析前に確認する。ここで弾かれた場合、保存処理には一切進まない。
+      const preCheck = await checkFileBeforeParse(file)
+      if (!preCheck.ok) {
+        setNotice((prev) => ({ ...prev, [kind]: { type: 'error', text: preCheck.reason! } }))
+        return
+      }
+
+      let raw: Awaited<ReturnType<typeof parseWorkbookRaw>>
+      try {
+        raw = await parseWorkbookRaw(file)
+      } catch (err) {
+        setNotice((prev) => ({ ...prev, [kind]: { type: 'error', text: describeParseError(err) } }))
+        return
+      }
+
+      const postCheck = checkParsedWorkbook(raw.sheets.length)
+      if (!postCheck.ok) {
+        setNotice((prev) => ({ ...prev, [kind]: { type: 'error', text: postCheck.reason! } }))
+        return
+      }
+
       const guessed = guessFileKind(raw.sheets.map((s) => s.name), raw.sheets)
       const wb = withFileKind(raw, kind)
       await saveWorkbook(wb)
 
+      const warnings: string[] = []
       const existingMapping = mappings[kind]
       if (existingMapping && existingMapping.fingerprint !== wb.fingerprint) {
-        setNotice((prev) => ({
-          ...prev,
-          [kind]: {
-            type: 'warn',
-            text: '前回確認したときと表の形（シート名・見出し・列数など）が変わっている可能性があります。「自動解析結果の確認・対応付け」で内容を見直してください。',
-          },
-        }))
+        warnings.push(
+          '前回確認したときと表の形（シート名・見出し・列数など）が変わっている可能性があります。「自動解析結果の確認・対応付け」で内容を見直してください。',
+        )
       } else if (guessed && guessed !== kind) {
-        setNotice((prev) => ({
-          ...prev,
-          [kind]: {
-            type: 'warn',
-            text: `このファイルの中身は「${FILE_KIND_LABELS[guessed]}」のように見えます。取込み先が間違っていないか確認してください。`,
-          },
-        }))
+        warnings.push(`このファイルの中身は「${FILE_KIND_LABELS[guessed]}」のように見えます。取込み先が間違っていないか確認してください。`)
+      }
+      const truncatedSheets = getTruncatedSheetNames(wb)
+      if (truncatedSheets.length > 0) {
+        warnings.push(
+          `一部のシート（${truncatedSheets.join('、')}）は行数・列数が想定より大きいため、一部分だけを読み込みました。表示や判定に影響する場合があります。`,
+        )
+      }
+      if (warnings.length > 0) {
+        setNotice((prev) => ({ ...prev, [kind]: { type: 'warn', text: warnings.join(' ') } }))
       }
 
       // 5つすべて取り込めたら、選択操作を挟まず自動的に確認画面へ進める。
@@ -83,9 +105,10 @@ export function ImportStep() {
         setCurrentStep('mapping')
       }
     } catch (err) {
+      // ここに来るのは事前検査・解析・分類のいずれにも当てはまらない想定外の失敗のみ。
       setNotice((prev) => ({
         ...prev,
-        [kind]: { type: 'error', text: `読み込みに失敗しました: ${(err as Error).message}` },
+        [kind]: { type: 'error', text: describeParseError(err) },
       }))
     } finally {
       setBusy(null)
