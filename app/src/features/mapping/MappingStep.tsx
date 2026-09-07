@@ -1,0 +1,188 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useAppState } from '../../state/AppStateContext'
+import { ALL_FILE_KINDS, CONFIDENCE_LABEL, FILE_KIND_LABELS } from '../../types'
+import type { FieldDetection, FileKind } from '../../types'
+import { detectFields } from '../../excel/detect'
+
+interface EditableDetection extends FieldDetection {
+  acknowledged: boolean
+}
+
+function seedEditable(detections: FieldDetection[]): EditableDetection[] {
+  return detections.map((d) => ({ ...d, acknowledged: d.confidence === 'high' || d.confidence === 'medium' }))
+}
+
+function groupBySheet(items: EditableDetection[]): [string, EditableDetection[]][] {
+  const map = new Map<string, EditableDetection[]>()
+  for (const item of items) {
+    if (!map.has(item.sheetName)) map.set(item.sheetName, [])
+    map.get(item.sheetName)!.push(item)
+  }
+  return [...map.entries()]
+}
+
+function FileMappingPanel({ kind }: { kind: FileKind }) {
+  const { workbooks, mappings, saveMapping } = useAppState()
+  const wb = workbooks[kind]
+  const existingMapping = mappings[kind]
+
+  const computed = useMemo(() => (wb ? detectFields(wb) : []), [wb])
+  const [items, setItems] = useState<EditableDetection[]>([])
+  const [savedAt, setSavedAt] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!wb) {
+      setItems([])
+      return
+    }
+    if (existingMapping && existingMapping.fingerprint === wb.fingerprint) {
+      setItems(seedEditable(existingMapping.detections))
+    } else {
+      setItems(seedEditable(computed))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wb?.fingerprint])
+
+  if (!wb) {
+    return (
+      <div className="panel">
+        <h3>{FILE_KIND_LABELS[kind]}</h3>
+        <p className="helptext">まだ取り込まれていません。「ファイル取込み」で取り込んでください。</p>
+      </div>
+    )
+  }
+
+  const formatChanged = existingMapping && existingMapping.fingerprint !== wb.fingerprint
+  const pendingAck = items.filter((i) => !i.acknowledged)
+
+  const updateItem = (key: string, patch: Partial<EditableDetection>) =>
+    setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)))
+
+  const handleConfirm = async () => {
+    await saveMapping({
+      fileKind: kind,
+      fingerprint: wb.fingerprint,
+      sourceFileName: wb.fileName,
+      detections: items.map(({ acknowledged: _a, ...d }) => d),
+      confirmedAt: new Date().toISOString(),
+    })
+    setSavedAt(new Date().toISOString())
+  }
+
+  return (
+    <div className="panel">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <h3>{FILE_KIND_LABELS[kind]}</h3>
+        <span className="helptext">元ファイル: {wb.fileName}</span>
+      </div>
+
+      {formatChanged && (
+        <div className="notice notice-warn">
+          前回確定した設定と、表の形（シート名・見出し・列数など）が変わっている可能性があります。
+          内容をもう一度確認してから確定し直してください。
+        </div>
+      )}
+      {existingMapping && !formatChanged && (
+        <div className="notice notice-info">
+          この内容は {new Date(existingMapping.confirmedAt).toLocaleString('ja-JP')} に確定済みです。
+          必要であれば修正して再確定できます。
+        </div>
+      )}
+
+      {items.length === 0 && (
+        <p className="helptext">
+          このファイルから自動判定できる項目が見つかりませんでした。ファイルの中身とファイル種別の対応が正しいか、
+          「ファイル取込み」画面で確認してください。
+        </p>
+      )}
+
+      {groupBySheet(items).map(([sheetName, group]) => (
+        <div className="mapping-group" key={sheetName}>
+          <div className="mapping-group-title">シート: {sheetName}</div>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>項目</th>
+                  <th>範囲</th>
+                  <th>サンプル値</th>
+                  <th>確度</th>
+                  <th>確認</th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.map((item) => (
+                  <tr key={item.key}>
+                    <td>
+                      {item.label}
+                      {item.note && <div className="helptext">{item.note}</div>}
+                    </td>
+                    <td>
+                      <input
+                        value={item.rangeRef}
+                        onChange={(e) => updateItem(item.key, { rangeRef: e.target.value, overridden: true })}
+                        style={{ width: 160, padding: 6, border: '1px solid #c7d0dc', borderRadius: 6 }}
+                      />
+                    </td>
+                    <td>{item.sampleValues.slice(0, 4).join(' / ') || '(なし)'}</td>
+                    <td>
+                      <span className={`badge badge-${item.confidence}`}>{CONFIDENCE_LABEL[item.confidence]}</span>
+                    </td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={item.acknowledged}
+                        onChange={(e) => updateItem(item.key, { acknowledged: e.target.checked })}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+
+      {items.length > 0 && (
+        <>
+          {pendingAck.length > 0 && (
+            <div className="notice notice-warn">
+              確度が「低」または「未検出」の項目が {pendingAck.length} 件あります。内容を確認し、範囲を修正してから
+              「確認」にチェックを入れてください。
+            </div>
+          )}
+          <div className="step-actions">
+            <button type="button" className="btn" disabled={pendingAck.length > 0} onClick={handleConfirm}>
+              この内容で確定する
+            </button>
+          </div>
+          {savedAt && <p className="helptext">確定しました（{new Date(savedAt).toLocaleString('ja-JP')}）</p>}
+        </>
+      )}
+    </div>
+  )
+}
+
+export function MappingStep() {
+  const { workbooks } = useAppState()
+  const importedKinds = ALL_FILE_KINDS.filter((k) => workbooks[k])
+
+  return (
+    <div>
+      <div className="panel">
+        <h2>3. 自動解析結果の確認・対応付け</h2>
+        <p className="helptext">
+          取り込んだファイルごとに、システムが自動判定したシート・見出し・セル範囲を確認します。
+          サンプル値を見て、内容が正しいか確認してください。確度が「低」「未検出」の項目は、範囲を修正してから
+          確認済みにしてください。ここで確定した内容は「学校別書式設定」として保存され、次回以降も再利用されます。
+        </p>
+        {importedKinds.length === 0 && (
+          <p className="helptext">まだファイルが取り込まれていません。先に「ファイル取込み」を行ってください。</p>
+        )}
+      </div>
+      {ALL_FILE_KINDS.map((kind) => (
+        <FileMappingPanel kind={kind} key={kind} />
+      ))}
+    </div>
+  )
+}
