@@ -41,6 +41,10 @@ export async function getAppMeta<T>(key: string): Promise<T | undefined> {
   return row?.value as T | undefined
 }
 
+export async function clearAppMeta(key: string): Promise<void> {
+  await dbDelete(STORES.appMeta, key)
+}
+
 export const META_KEYS = {
   lastActiveProfileId: 'lastActiveProfileId',
 } as const

@@ -7,7 +7,7 @@ function makeId(fiscalYear: number, grade: string, className: string): string {
 }
 
 export function ProfileStep() {
-  const { activeProfile, profiles, saveProfile, selectProfile, setCurrentStep } = useAppState()
+  const { activeProfile, profiles, saveProfile, selectProfile, deleteProfile, setCurrentStep } = useAppState()
 
   const [fiscalYear, setFiscalYear] = useState<number>(new Date().getFullYear())
   const [grade, setGrade] = useState('')
@@ -15,6 +15,8 @@ export function ProfileStep() {
   const [teacherName, setTeacherName] = useState('')
   const [subjectTeachers, setSubjectTeachers] = useState<SubjectTeacher[]>([])
   const [savedAt, setSavedAt] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     if (activeProfile) {
@@ -23,6 +25,13 @@ export function ProfileStep() {
       setClassName(activeProfile.className)
       setTeacherName(activeProfile.teacherName)
       setSubjectTeachers(activeProfile.subjectTeachers)
+    } else {
+      // 登録済みの学級が0件になった場合（最後の1件を削除した等）に、
+      // 削除済みの学級の内容が画面に残らないようにする。
+      setGrade('')
+      setClassName('')
+      setTeacherName('')
+      setSubjectTeachers([])
     }
   }, [activeProfile])
 
@@ -61,6 +70,20 @@ export function ProfileStep() {
     setSavedAt(null)
   }
 
+  // マージ方式の復元（別紙4.1）ではバックアップに含まれない学級は消えずに残るため、
+  // 使わなくなった学級を利用者自身で片付けられるようにする削除機能。
+  const handleDeleteConfirmed = async () => {
+    if (!confirmDeleteId) return
+    setDeleteError(null)
+    try {
+      await deleteProfile(confirmDeleteId)
+      setConfirmDeleteId(null)
+      setSavedAt(null)
+    } catch {
+      setDeleteError('削除に失敗しました。もう一度お試しください。')
+    }
+  }
+
   return (
     <div className="panel">
       <h2>1. 利用者・担当学級設定</h2>
@@ -86,8 +109,45 @@ export function ProfileStep() {
               </option>
             ))}
           </select>
+          {activeProfile && (
+            <button
+              type="button"
+              className="btn btn-danger"
+              style={{ marginTop: 8, alignSelf: 'flex-start' }}
+              onClick={() => {
+                setDeleteError(null)
+                setConfirmDeleteId(activeProfile.id)
+              }}
+            >
+              この学級を削除する
+            </button>
+          )}
         </div>
       )}
+
+      {confirmDeleteId &&
+        (() => {
+          const target = profiles.find((p) => p.id === confirmDeleteId)
+          if (!target) return null
+          return (
+            <div className="notice notice-warn">
+              <p>
+                「{target.fiscalYear}年度 {target.grade}学年{target.className}組 - {target.teacherName}
+                」を削除します。この操作は取り消せません。取り込み済みのファイルや学校別書式設定は
+                削除されず、他の学級にも影響しません。よろしいですか？
+              </p>
+              <div className="step-actions">
+                <button type="button" className="btn btn-danger" onClick={() => void handleDeleteConfirmed()}>
+                  削除を確定する
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => setConfirmDeleteId(null)}>
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      {deleteError && <div className="notice notice-error">{deleteError}</div>}
 
       <div className="inline-fields">
         <div className="field-row">

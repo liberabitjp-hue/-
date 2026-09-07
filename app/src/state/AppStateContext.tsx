@@ -3,6 +3,8 @@ import type { ReactNode } from 'react'
 import type { ClassProfile, FileKind, FileMapping, ParsedWorkbook, StepId } from '../types'
 import { ALL_FILE_KINDS, STEP_IDS } from '../types'
 import {
+  clearAppMeta,
+  deleteClassProfile as repoDeleteClassProfile,
   getAppMeta,
   getClassProfile,
   getFileMapping,
@@ -26,6 +28,7 @@ interface AppState {
   setCurrentStep: (s: StepId) => void
   saveProfile: (p: ClassProfile) => Promise<void>
   selectProfile: (id: string) => Promise<void>
+  deleteProfile: (id: string) => Promise<void>
   saveWorkbook: (wb: ParsedWorkbook) => Promise<void>
   saveMapping: (m: FileMapping) => Promise<void>
   reloadProfiles: () => Promise<void>
@@ -97,6 +100,27 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  // 学級プロファイルの削除（別紙4.1診断で判明した「マージ復元の穴」対策）。
+  // ファイル種別ごとの取込み済みファイル・学校別書式設定は学級に紐付いておらず
+  // 共有データのため、ここでは classProfiles のみを消す。
+  const deleteProfile = useCallback(
+    async (id: string) => {
+      await repoDeleteClassProfile(id)
+      const newList = await listClassProfiles()
+      setProfiles(newList)
+      if (activeProfile?.id === id) {
+        const fallback = newList[0] ?? null
+        setActiveProfile(fallback)
+        if (fallback) {
+          await setAppMeta(META_KEYS.lastActiveProfileId, fallback.id)
+        } else {
+          await clearAppMeta(META_KEYS.lastActiveProfileId)
+        }
+      }
+    },
+    [activeProfile],
+  )
+
   const saveWorkbook = useCallback(async (wb: ParsedWorkbook) => {
     await repoSaveImportedWorkbook(wb)
     setWorkbooks((prev) => ({ ...prev, [wb.fileKind]: wb }))
@@ -119,6 +143,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setCurrentStep,
       saveProfile,
       selectProfile,
+      deleteProfile,
       saveWorkbook,
       saveMapping,
       reloadProfiles,
@@ -133,6 +158,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       currentStep,
       saveProfile,
       selectProfile,
+      deleteProfile,
       saveWorkbook,
       saveMapping,
       reloadProfiles,
