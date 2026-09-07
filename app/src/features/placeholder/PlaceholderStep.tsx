@@ -26,6 +26,19 @@ const ADVISORY_VALIDATIONS = [
   '実施校時が指定されていない行事が含まれていないか',
 ]
 
+/** 別紙4.5「安全な値コピーのプレビュー」の予定内容。コピー対象は自動配置・編集後の
+ *  月案データ（フェーズB・D）そのものであり、現時点ではまだ存在しない。ここでは、
+ *  実装済みになったときの動作を先に画面上で説明しておく
+ *  （docs/assumptions.md「別紙4.5対応」参照）。 */
+const COPY_REQUIREMENTS = [
+  'E4:Q65相当（教科名・進度・単元名・備考等）とAL4:AL65相当（下校予定時刻）を別々のボタンでコピーする',
+  'コピー前に、行数・列数・貼付開始セル・空白セルの位置を画面上で確認できる',
+  '数式・書式・マクロは対象に含めず、値だけをコピーする',
+  '分数は文字列として保持し、日付へ変換しない',
+  'Clipboard APIが使えない環境では、TSVダウンロードまたは選択可能な表で代替する',
+  'コピー操作によって元のExcelファイルをアプリ側から変更することはない',
+]
+
 interface Props {
   stepId: StepId
   /** 別紙4.3「低確度・未検出の項目がある状態では、自動作成を開始できない」に対応した判定。
@@ -78,6 +91,20 @@ export function PlaceholderStep({ stepId, canStartGeneration, importedCount, map
             <p className="helptext" style={{ fontWeight: 600 }}>注意事項（確認済みにできる。確定は妨げない）</p>
             <ul className="helptext">
               {ADVISORY_VALIDATIONS.map((v) => (
+                <li key={v}>{v}</li>
+              ))}
+            </ul>
+          </>
+        )}
+        {stepId === 'finalize' && (
+          <>
+            <p className="helptext">
+              元Excelへの値コピー機能（下記のバックアップ機能とは別の、月案完成後の出力機能）は、コピー対象となる
+              月案データ自体がフェーズB（自動作成）・フェーズD（編集）を経てできあがるため、この画面自体はまだ
+              動作しません。実装されたときは、以下を満たす予定です（別紙4.5「安全な値コピーのプレビュー」）。
+            </p>
+            <ul className="helptext">
+              {COPY_REQUIREMENTS.map((v) => (
                 <li key={v}>{v}</li>
               ))}
             </ul>
