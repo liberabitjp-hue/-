@@ -34,7 +34,19 @@ function computeStatuses(
   return statuses
 }
 
-function StepContent({ stepId }: { stepId: StepId }) {
+function StepContent({
+  stepId,
+  canStartGeneration,
+  importedCount,
+  mappingConfirmedCount,
+  totalKinds,
+}: {
+  stepId: StepId
+  canStartGeneration: boolean
+  importedCount: number
+  mappingConfirmedCount: number
+  totalKinds: number
+}) {
   switch (stepId) {
     case 'profile':
       return <ProfileStep />
@@ -42,6 +54,16 @@ function StepContent({ stepId }: { stepId: StepId }) {
       return <ImportStep />
     case 'mapping':
       return <MappingStep />
+    case 'generate':
+      return (
+        <PlaceholderStep
+          stepId={stepId}
+          canStartGeneration={canStartGeneration}
+          importedCount={importedCount}
+          mappingConfirmedCount={mappingConfirmedCount}
+          totalKinds={totalKinds}
+        />
+      )
     default:
       return <PlaceholderStep stepId={stepId} />
   }
@@ -73,6 +95,13 @@ export default function App() {
     mappingConfirmedCount,
   )
 
+  // 別紙4.3「低確度・未検出の項目がある状態では、自動作成を開始できない」への対応。
+  // ③の各ファイルの「確定する」操作自体は既に低確度項目のチェックを強制しているが、
+  // それはファイル単位の保存操作を止めるだけで、画面遷移そのものは③を経由せず
+  // ④以降へ自由に移動できてしまう。フェーズ2（生成ロジック）実装時にこの判定を
+  // 使い回せるよう、ここで一箇所にまとめて算出しておく。
+  const canStartGeneration = importedCount === ALL_FILE_KINDS.length && mappingConfirmedCount === ALL_FILE_KINDS.length
+
   return (
     <div className="app-shell">
       <aside className="app-sidebar">
@@ -94,7 +123,13 @@ export default function App() {
         <Stepper current={currentStep} statuses={statuses} onSelect={setCurrentStep} />
       </aside>
       <main className={`app-main${currentStep === 'mapping' ? ' app-main-wide' : ''}`}>
-        <StepContent stepId={currentStep} />
+        <StepContent
+          stepId={currentStep}
+          canStartGeneration={canStartGeneration}
+          importedCount={importedCount}
+          mappingConfirmedCount={mappingConfirmedCount}
+          totalKinds={ALL_FILE_KINDS.length}
+        />
       </main>
     </div>
   )

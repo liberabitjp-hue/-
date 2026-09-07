@@ -8,10 +8,33 @@ const PHASE_DESCRIPTIONS: Record<string, string> = {
   D: 'フェーズD（編集・出力）で実装予定です。月案のドラッグ&ドロップ編集、固定・再調整、警告表示、E4:Q65相当とAL4:AL65相当の値コピー、TSV代替出力を行います。',
 }
 
-export function PlaceholderStep({ stepId }: { stepId: StepId }) {
+interface Props {
+  stepId: StepId
+  /** 別紙4.3「低確度・未検出の項目がある状態では、自動作成を開始できない」に対応した判定。
+   *  'generate'（自動作成の実行状況）ステップでのみ意味を持つ。 */
+  canStartGeneration?: boolean
+  importedCount?: number
+  mappingConfirmedCount?: number
+  totalKinds?: number
+}
+
+export function PlaceholderStep({ stepId, canStartGeneration, importedCount, mappingConfirmedCount, totalKinds }: Props) {
   const phase = STEP_PHASE[stepId]
   return (
     <div>
+      {stepId === 'generate' && (
+        <div className={`notice ${canStartGeneration ? 'notice-info' : 'notice-warn'}`}>
+          {canStartGeneration ? (
+            <>自動作成を開始するための前提条件（ファイル取込み・対応付けの確認）はすべて満たされています。生成ロジックはフェーズ2で実装予定です。</>
+          ) : (
+            <>
+              自動作成を開始するには、②ですべてのファイル（{totalKinds}点）を取り込み、③ですべての自動解析結果を
+              確認・確定してください（別紙4.3「低確度・未検出の項目がある状態では自動作成を開始できない」への対応）。
+              現在: ファイル取込み {importedCount}/{totalKinds}件、対応付け確定 {mappingConfirmedCount}/{totalKinds}件。
+            </>
+          )}
+        </div>
+      )}
       <div className="panel future-panel">
         <h2>
           {STEP_LABELS[stepId]} <span className="helptext">（フェーズ{phase} - 未実装）</span>
