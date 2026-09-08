@@ -46,8 +46,11 @@ export function guessFileKind(sheetNames: string[], sheets: ParsedWorkbook['shee
   )
   if (hasFraction) return 'fractionsTable'
 
+  // Header text in this school's files is often spaced out per character
+  // (each kanji separated by a full-width space), same as detectors/fixedTimetable.ts -
+  // keep this regex in sync with that one (a real file failed to guess until this was fixed).
   const hasFixedTimetableMarkers = sheets.some(
-    (s) => findCell(s, /特別?\s*教室/, { rowTo: 5 }) && findCell(s, /^分\s*科$/, { rowTo: 5 }),
+    (s) => findCell(s, /特\s*別?\s*教\s*室/, { rowTo: 5 }) && findCell(s, /^分\s*科$/, { rowTo: 5 }),
   )
   if (hasFixedTimetableMarkers) return 'fixedTimetable'
 

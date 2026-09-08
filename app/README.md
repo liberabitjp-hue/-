@@ -34,6 +34,10 @@ src/
   features/           画面（ステップ）ごとのUIコンポーネント
   state/              画面をまたぐ状態（AppStateContext）
   components/         共通UI部品（ステッパー等）
+  diagnostics/        診断情報の記録・書出し（別紙4.7）
+
+tests/                回帰テスト（別紙5.2、Vitest。npm testで実行）
+test-fixtures/        回帰テスト用の実データ（作成者名等のメタデータのみ削除）
 ```
 
 生成ロジック（フェーズB以降）・単元進度管理・制約評価・出力処理は、まだ実装されていません。
@@ -46,6 +50,8 @@ npm install
 npm run dev      # 開発サーバー（http://localhost:5173 等）
 npm run build    # dist/index.html を1ファイルとして出力
 npx tsc -b       # 型チェックのみ
+npm test         # 回帰テスト（別紙5.2、tests/ 配下、実データのtest-fixtures/を使用）
+npm run typecheck:tests  # tests/ の型チェック
 ```
 
 `npm run build` の後、`dist/index.html` をブラウザで直接開けば動作確認できます
@@ -113,6 +119,12 @@ npx tsc -b       # 型チェックのみ
   保存しない）。サイドバーの「診断情報を書き出す」ボタンを押した場合のみ、
   アプリ版・ブラウザ情報とともにJSONファイルとして書き出せる。児童名・
   学級名・元Excelの内容は一切含まない
+- ✅ 正解データを用いた回帰テスト（別紙5.2、`docs/assumptions.md`参照）:
+  実際にお預かりした5つのサンプルファイル（作成者名等のメタデータのみ削除、
+  セルの内容は実データのまま）を`test-fixtures/`に保存し、Vitestで各ファイル
+  種別の検出ロジックを検証（`npm test`）。整備の過程で、固定時間割ファイルの
+  種別自動推測（`guessFileKind`）が実データを正しく判定できていない不具合を
+  発見・修正した
 - 🚧 フェーズB（生成ロジック）以降は未実装。画面のステップとしては用意してあり、
   「今後実装」と表示されます。
 
