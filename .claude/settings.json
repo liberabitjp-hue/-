@@ -1,4 +1,38 @@
 {
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit",
+      "Write",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git show*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(npm install*)",
+      "Bash(npm run*)",
+      "Bash(npm test*)",
+      "Bash(npx vitest*)",
+      "Bash(npx tsc*)",
+      "Bash(npx oxlint*)",
+      "Bash(ls*)",
+      "Bash(mkdir*)",
+      "Bash(cp*)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean*)",
+      "Bash(rm -rf*)",
+      "Bash(npm publish*)",
+      "Bash(sudo*)",
+      "Bash(chmod*)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
