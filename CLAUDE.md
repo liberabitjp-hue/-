@@ -38,6 +38,11 @@ Googleカレンダー・メール・Slack等の外部連携(MCPコネクタ)に�
 
 ## MacBookでの利用・外部連携
 
-GitHub連携(PR作成・CI確認等)とGoogleカレンダー連携の設定手順は
+GitHub連携(PR作成・CI確認等)・Googleカレンダー連携・Remote Control
+(MacBookのセッションをスマホ/ブラウザから操作)の設定手順は
 `docs/claude-code-mac-setup.md` にまとめてある。特にカレンダーは
 書き込み権限込みでの連携になる点、CLIでの接続不具合が既知である点に注意。
+Remote Controlはこのクラウド環境からは設定できず、MacBook実機での作業が
+必要。接続した端末はローカルのファイルシステム・シェルにフルアクセス
+できるため、実際の学校データを含むこのリポジトリでは常時自動有効化
+(`remoteControlAtStartup: true`)はしないこと。
