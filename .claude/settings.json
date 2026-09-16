@@ -21,12 +21,10 @@
       "Bash(npx oxlint*)",
       "Bash(ls*)",
       "Bash(mkdir*)",
-      "Bash(cp dist/* ../release/*)",
       "Bash(cp*)"
     ],
     "ask": [
       "Bash(git push*)",
-      "Bash(git push --force*)",
       "Bash(git reset --hard*)",
       "Bash(git clean*)",
       "Bash(rm -rf*)",
