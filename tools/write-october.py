@@ -24,11 +24,9 @@ SRC = '/home/user/-/app/test-fixtures/output-template.xlsm'
 SHEET = 'xl/worksheets/sheet7.xml'    # 「10月」
 PLAN_SHEET = 'xl/worksheets/sheet13.xml'  # 「予定表」
 
-# 授業時数･下校予定時刻（9/17版）で10/5の上学年に6校時（児童会活動日＝委員会活動）が
-# 追加され、5学年の実施できる時数が113→114になった。予定表の10月「児童会」は
-# 追加前の1のままなので、これを2に直す。ここを直さないと過不足欄に+1が残る。
-# （J17は数式ではなく値。学期計・合計はすべて数式なのでExcel側で自動的に追従する）
-PLAN_FIXES = {'J17': (1, 2)}
+# 予定表シートは利用者の入力値なので原則として変えない。
+# 10月は5年1組の表の数字（予定113・計画114、児童会+1）に揃えるため変更なし。
+PLAN_FIXES = {}
 SUBJECT_COLS = ['E', 'G', 'I', 'K', 'M', 'O']
 PROGRESS_COLS = ['F', 'H', 'J', 'L', 'N', 'P']
 NOTE_COL = 'Q'
