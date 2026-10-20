@@ -1,37 +1,43 @@
 # -*- coding: utf-8 -*-
-"""october-plan.py が組んだ10月の初期案を output-template.xlsm の「10月」シートへ書き込む。
+"""月ごとの配置スクリプトが組んだ初期案を output-template.xlsm の各月シートへ書き込む。
 
-シートXMLを直接書き換えるため、セル書式・数式・他シート・VBAマクロは一切変更しない。
+    python3 tools/write-plan.py 出力先.xlsm tools/october-plan.py:10月 tools/november-plan.py:11月
+
+シートXMLを直接書き換えるため、セル書式・数式・他シート・VBAマクロは一切変更しない
+（SheetJSでの書き出しはセル書式を落とすため使わない）。予定表シートも変更しない。
 進度は t="str" の文字列として書き込む（Excelが日付へ誤変換しないようにするため）。
 """
+import importlib.util
 import os
 import re
-import shutil
 import sys
 import zipfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from importlib import import_module
-op = import_module('october-plan'.replace('-', '_')) if False else None
-
-import importlib.util
-spec = importlib.util.spec_from_file_location(
-    'october_plan', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'october-plan.py'))
-op = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(op)
-
-SRC = '/home/user/-/app/test-fixtures/output-template.xlsm'
-SHEET = 'xl/worksheets/sheet7.xml'    # 「10月」
-PLAN_SHEET = 'xl/worksheets/sheet13.xml'  # 「予定表」
-
-# 予定表シートは利用者の入力値なので原則として変えない。
-# 10月は5年1組の表の数字（予定113・計画114、児童会+1）に揃えるため変更なし。
-PLAN_FIXES = {}
+SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'app', 'test-fixtures',
+                   'output-template.xlsm')
 SUBJECT_COLS = ['E', 'G', 'I', 'K', 'M', 'O']
 PROGRESS_COLS = ['F', 'H', 'J', 'L', 'N', 'P']
 NOTE_COL = 'Q'
 MANAGED = set(SUBJECT_COLS + PROGRESS_COLS + [NOTE_COL])
 COL_ORDER = ['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q']
+
+
+def load_plan(path):
+    spec = importlib.util.spec_from_file_location(os.path.basename(path).replace('-', '_'), path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def sheet_part(blobs, sheet_name):
+    """シート名から xl/worksheets/sheetN.xml を引く。"""
+    wb = blobs['xl/workbook.xml'].decode('utf-8')
+    rels = blobs['xl/_rels/workbook.xml.rels'].decode('utf-8')
+    m = re.search(r'<sheet name="%s"[^>]*r:id="(rId\d+)"' % re.escape(sheet_name), wb)
+    if not m:
+        raise SystemExit('シート「%s」がありません' % sheet_name)
+    rel = re.search(r'<Relationship\b[^>]*\bId="%s"[^>]*>' % m.group(1), rels).group(0)
+    return 'xl/' + re.search(r'Target="([^"]+)"', rel).group(1).lstrip('/').replace('xl/', '', 1)
 
 
 def esc(s):
@@ -42,8 +48,8 @@ def cell_xml(col, row, text):
     return '<c r="%s%d" t="str"><v>%s</v></c>' % (col, row, esc(text))
 
 
-def col_of(ref):
-    return re.match(r'([A-Z]+)', ref).group(1)
+def col_of(cell):
+    return re.search(r'r="([A-Z]+)\d+"', cell).group(1)
 
 
 def col_num(c):
@@ -63,20 +69,17 @@ def rewrite_row(row_xml, row_no, values):
         open_tag, body, close_tag = '<row%s>' % m2.group(1), '', '</row>'
     else:
         open_tag, body, close_tag = m.group(1), m.group(2), m.group(3)
-
     cells = re.findall(r'<c\b[^>]*?(?:/>|>.*?</c>)', body, re.S)
-    kept = [c for c in cells
-            if col_of(re.search(r'r="([A-Z]+\d+)"', c).group(1)) not in MANAGED]
+    kept = [c for c in cells if col_of(c) not in MANAGED]
     new = [cell_xml(c, row_no, values[c]) for c in COL_ORDER if values.get(c)]
-    allc = kept + new
-    allc.sort(key=lambda c: col_num(col_of(re.search(r'r="([A-Z]+\d+)"', c).group(1))))
+    allc = sorted(kept + new, key=lambda c: col_num(col_of(c)))
     return open_tag + ''.join(allc) + close_tag
 
 
-def build_values():
-    """行番号 -> {列: 文字列}"""
-    plan = op.assign_units(op.build())
-    periods = {d: p for d, _, p in op.DAYS}
+def build_values(plan_mod):
+    """行番号 -> {列: 文字列}。日 d の教科行は 2d+2、単元行は 2d+3。"""
+    plan = plan_mod.assign_units(plan_mod.build())
+    periods = {d: p for d, _, p in plan_mod.DAYS}
     rows = {}
     for day in range(1, 32):
         sub_row, unit_row = 2 * day + 2, 2 * day + 3
@@ -90,19 +93,13 @@ def build_values():
                 rows[sub_row][PROGRESS_COLS[p - 1]] = prog
             if unit:
                 rows[unit_row][SUBJECT_COLS[p - 1]] = unit
-        if op.NOTES.get(day):
-            rows[sub_row][NOTE_COL] = op.NOTES[day]
+        if plan_mod.NOTES.get(day):
+            rows[sub_row][NOTE_COL] = plan_mod.NOTES[day]
     return rows
 
 
-def main(dest):
-    rows = build_values()
-    with zipfile.ZipFile(SRC) as zin:
-        names = zin.namelist()
-        blobs = {n: zin.read(n) for n in names}
-        infos = {n: zin.getinfo(n) for n in names}
-
-    xml = blobs[SHEET].decode('utf-8')
+def write_sheet(xml, rows):
+    """月シートのXMLへ rows を書き込み、(新しいXML, 更新行数) を返す。"""
     touched = 0
 
     def repl(m):
@@ -117,8 +114,7 @@ def main(dest):
 
     # 元のシートに存在しない行（休日・空行）は、必要なものだけ順序を守って挿入する
     present = {int(m) for m in re.findall(r'<row r="(\d+)"', xml)}
-    missing = sorted(r for r, v in rows.items() if v and r not in present)
-    for row_no in missing:
+    for row_no in sorted(r for r, v in rows.items() if v and r not in present):
         body = ''.join(cell_xml(c, row_no, rows[row_no][c])
                        for c in COL_ORDER if rows[row_no].get(c))
         block = '<row r="%d">%s</row>' % (row_no, body)
@@ -131,21 +127,24 @@ def main(dest):
         present.add(row_no)
         touched += 1
 
-    expected = sum(1 for v in rows.values() if v)
-    written = len({r for r, v in rows.items() if v})
-    if touched < written:
-        raise SystemExit('書き換えきれなかった行があります（%d/%d）' % (touched, written))
-    blobs[SHEET] = xml.encode('utf-8')
+    needed = {r for r, v in rows.items() if v}
+    if not needed <= present:
+        raise SystemExit('書き換えきれなかった行があります: %s' % sorted(needed - present))
+    return xml, touched
 
-    plan_xml = blobs[PLAN_SHEET].decode('utf-8')
-    for ref, (before, after) in PLAN_FIXES.items():
-        old = '<c r="%s"><v>%d</v></c>' % (ref, before)
-        new = '<c r="%s"><v>%d</v></c>' % (ref, after)
-        if old not in plan_xml:
-            raise SystemExit('予定表!%s が想定の値(%d)ではありません' % (ref, before))
-        plan_xml = plan_xml.replace(old, new, 1)
-        print('予定表!%s を %d → %d に直しました' % (ref, before, after))
-    blobs[PLAN_SHEET] = plan_xml.encode('utf-8')
+
+def main(dest, specs):
+    with zipfile.ZipFile(SRC) as zin:
+        names = zin.namelist()
+        blobs = {n: zin.read(n) for n in names}
+        infos = {n: zin.getinfo(n) for n in names}
+
+    for spec in specs:
+        script, sheet_name = spec.rsplit(':', 1)
+        part = sheet_part(blobs, sheet_name)
+        xml, touched = write_sheet(blobs[part].decode('utf-8'), build_values(load_plan(script)))
+        blobs[part] = xml.encode('utf-8')
+        print('「%s」(%s) に書き込みました（%d行）' % (sheet_name, part, touched))
 
     with zipfile.ZipFile(dest, 'w', zipfile.ZIP_DEFLATED) as zout:
         for n in names:
@@ -153,8 +152,10 @@ def main(dest):
             zi.compress_type = zipfile.ZIP_DEFLATED
             zi.external_attr = infos[n].external_attr
             zout.writestr(zi, blobs[n])
-    print('書き出しました: %s（%d行を更新）' % (dest, touched))
+    print('書き出しました: %s' % dest)
 
 
 if __name__ == '__main__':
-    main(sys.argv[1] if len(sys.argv) > 1 else '/home/user/-/月学習予定表_令和8年10月_5年2組.xlsm')
+    if len(sys.argv) < 3:
+        raise SystemExit(__doc__)
+    main(sys.argv[1], sys.argv[2:])
