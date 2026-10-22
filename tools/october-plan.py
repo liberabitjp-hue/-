@@ -284,24 +284,16 @@ def check_tsukyu(plan):
 
 
 def check_bunka_runs(slots):
-    """分科（外国語・理科・書写）の並びを点検する（利用者指示）。
-    - 同じ分科の教科は1日1時間まで
-    - 分科どうしを続けて置かない（外国語→書写のように教科が違っても不可）
+    """分科（外国語・理科・書写）の点検（利用者指示）。
+    同じ分科の教科は1日1時間まで（理科②理科③も、理科①理科④も不可）。
+    教科が違えば続けてよい（理科①外国語②は可）。
     """
-    bunka = ('外国語', '理科', '書写')
-    ng = []
     per_day = {}
     for (d, p), (s, _) in sorted(slots.items()):
-        if s not in bunka:
-            continue
-        per_day.setdefault((d, s), []).append(p)
-        nxt = slots.get((d, p + 1), ('',))[0]
-        if nxt in bunka:
-            ng.append('%d日%d・%d校時 %s→%s（分科が連続）' % (d, p, p + 1, s, nxt))
-    for (d, s), ps in sorted(per_day.items()):
-        if len(ps) > 1:
-            ng.append('%d日 %sが%d時間（%s校時）' % (d, s, len(ps), '・'.join(map(str, ps))))
-    return ng
+        if s in ('外国語', '理科', '書写'):
+            per_day.setdefault((d, s), []).append(p)
+    return ['%d日 %sが%d時間（%s校時）' % (d, s, len(ps), '・'.join(map(str, ps)))
+            for (d, s), ps in sorted(per_day.items()) if len(ps) > 1]
 
 
 def main():
@@ -328,7 +320,7 @@ def main():
             sub, unit, prog, origin = plan[(day, p)]
             print('   %d校時  %-4s %-7s %-26s [%s]' % (p, sub, prog or '', unit, origin))
     runs = check_bunka_runs(slots)
-    print('\n--- 分科の点検（同じ教科は1日1時間、分科どうしを続けない） ---')
+    print('\n--- 分科の点検（同じ教科は1日1時間まで） ---')
     print('\n'.join('   ' + x for x in runs) if runs else '   なし')
     ng = check_tsukyu(plan)
     print('\n--- 通級（火2国語・水3算数・水5国語・金2算数）の点検 ---')
