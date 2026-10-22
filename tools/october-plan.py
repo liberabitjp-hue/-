@@ -283,6 +283,13 @@ def check_tsukyu(plan):
     return ng
 
 
+def check_bunka_runs(slots):
+    """分科の同じ教科が2時間続く枠を返す（利用者指示: 分科の2時間連続は避ける）。"""
+    return ['%d日%d・%d校時 %s' % (d, p, p + 1, s)
+            for (d, p), (s, _) in sorted(slots.items())
+            if s in ('外国語', '理科', '書写') and slots.get((d, p + 1), ('',))[0] == s]
+
+
 def main():
     slots = build()
     counts = tally(slots)
@@ -306,6 +313,9 @@ def main():
         for p in range(1, periods + 1):
             sub, unit, prog, origin = plan[(day, p)]
             print('   %d校時  %-4s %-7s %-26s [%s]' % (p, sub, prog or '', unit, origin))
+    runs = check_bunka_runs(slots)
+    print('\n--- 分科の2時間連続の点検 ---')
+    print('\n'.join('   ' + x for x in runs) if runs else '   なし')
     ng = check_tsukyu(plan)
     print('\n--- 通級（火2国語・水3算数・水5国語・金2算数）の点検 ---')
     print('\n'.join('   ' + x for x in ng) if ng else '   すべて想定どおり')

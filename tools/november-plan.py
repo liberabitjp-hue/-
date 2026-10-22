@@ -42,11 +42,12 @@ EVENTS = {
 # 24日: 1理科、2～4家庭（2・3は1組が図工）。
 # 13日（担任出張）・27日（5体育は残す）: 外国語・理科・書写を優先。27日の理科は1時間まで。
 #   外国語は渡部先生の割当て（13日・27日とも1校時）のみ。理科は佐藤先生の固定時間割で
-#   空いている金2～4から1時間ずつ。残りは書写（2時間続き）と、1組担任が空く13日2校時の家庭。
+#   空いている金2～4から1時間ずつ。残りは書写と、1組担任が空く13日2校時の家庭。
+#   分科の同じ教科を2時間続けない（書写の2時間続きは不可）ため、書写は理科をはさんで置く。
 USER_FIXED = {
     (24, 1): '理科',
-    (13, 3): '理科', (13, 4): '書写', (13, 5): '書写',
-    (27, 2): '理科', (27, 3): '書写', (27, 4): '書写',
+    (13, 3): '書写', (13, 4): '理科', (13, 5): '書写',
+    (27, 2): '書写', (27, 3): '理科', (27, 4): '書写',
 }
 
 # --- 3) 分科の確定枠（外国語・渡部先生。2日5校時は学年合同） ---
@@ -283,6 +284,16 @@ CLASS1_BUNKA = {(13, 2)}
 TEACHER_FREE_OK = ('外国語', '理科', '書写')
 
 
+BUNKA_SUBJECTS = ('外国語', '理科', '書写')
+
+
+def check_bunka_runs(slots):
+    """分科の同じ教科が2時間続く枠を返す（利用者指示: 分科の2時間連続は避ける）。"""
+    return ['%d日%d・%d校時 %s' % (d, p, p + 1, s)
+            for (d, p), (s, _) in sorted(slots.items())
+            if s in BUNKA_SUBJECTS and slots.get((d, p + 1), ('',))[0] == s]
+
+
 def check_trip(plan):
     ng = []
     for (day, period), (sub, _u, _p, origin) in sorted(plan.items()):
@@ -329,6 +340,9 @@ def main():
         for p in range(1, periods + 1):
             sub, unit, prog, origin = plan[(day, p)]
             print('   %d校時  %-4s %-7s %-26s [%s]' % (p, sub, prog or '', unit, origin))
+    runs = check_bunka_runs(slots)
+    print('\n--- 分科の2時間連続の点検 ---')
+    print('\n'.join('   ' + x for x in runs) if runs else '   なし')
     trip = check_trip(plan)
     print('\n--- 担任出張の日（%s日）の点検 ---' % '・'.join(map(str, sorted(TRIP_DAYS))))
     print('\n'.join('   ' + x for x in trip) if trip else '   担任の教科なし（音楽・道徳なども入っていない）')
