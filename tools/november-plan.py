@@ -275,6 +275,24 @@ def assign_units(slots):
 
 TSUKYU = {('火', 2): '国語', ('水', 3): '算数', ('水', 5): '国語', ('金', 2): '算数'}
 
+# 担任が出張の日。2組担任の教科（音楽・道徳など）は置けない。置けるのは分科（外国語・理科・書写）、
+# 学年合同の枠、1組が分科の時間に1組担任が受け持つ授業だけ
+TRIP_DAYS = {13}
+# 1組が分科（外国語・理科・書写）の時間 = 1組担任が2組を受け持てる時間（1組の11月学習予定表）
+CLASS1_BUNKA = {(13, 2)}
+TEACHER_FREE_OK = ('外国語', '理科', '書写')
+
+
+def check_trip(plan):
+    ng = []
+    for (day, period), (sub, _u, _p, origin) in sorted(plan.items()):
+        if day not in TRIP_DAYS or sub in TEACHER_FREE_OK or origin == '学年合わせ':
+            continue
+        if (day, period) in CLASS1_BUNKA:
+            continue
+        ng.append('%d日%d校時: %s（担任出張の日に担任の教科）' % (day, period, sub))
+    return ng
+
 
 def check_tsukyu(plan):
     ng = []
@@ -311,6 +329,9 @@ def main():
         for p in range(1, periods + 1):
             sub, unit, prog, origin = plan[(day, p)]
             print('   %d校時  %-4s %-7s %-26s [%s]' % (p, sub, prog or '', unit, origin))
+    trip = check_trip(plan)
+    print('\n--- 担任出張の日（%s日）の点検 ---' % '・'.join(map(str, sorted(TRIP_DAYS))))
+    print('\n'.join('   ' + x for x in trip) if trip else '   担任の教科なし（音楽・道徳なども入っていない）')
     ng = check_tsukyu(plan)
     print('\n--- 通級（火2国語・水3算数・水5国語・金2算数）の点検 ---')
     print('\n'.join('   ' + x for x in ng) if ng else '   すべて想定どおり')
