@@ -71,7 +71,7 @@ def main(plan_path, class1_path):
             problems.append('%s %sが1組と同時（分科の先生が重なる）' % (where, a))
         if a == b and a in ('音楽', '家庭') and k not in purple:
             problems.append('%s %sが1組と同時（特別教室が重なる）' % (where, a))
-        if b == '家庭' and a not in CLASS1_TEACHER_FREE:
+        if b == '家庭' and a not in CLASS1_TEACHER_FREE and k not in purple:
             problems.append('%s 2組が家庭だが、1組担任は1組の%sを指導中' % (where, a))
         if a == '図工' and b not in ('家庭',) + BUNKA:
             problems.append('%s 1組の図工（2組担任が指導）の時間に、2組が%s' % (where, b))
