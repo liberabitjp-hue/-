@@ -1,7 +1,7 @@
 // 書き出したxlsmを検算する。
 //   node tools/verify-output.cjs 出力.xlsm 10月 11月
 // 月シートごとに、配置した教科を数えて予定表シートの予定時数と比べ（過不足）、
-// 下校時刻（AL列）が h:mm で表示されるかを確かめる。あわせて、ひな型から
+// 下校時刻（AL列）が文字列 "15:45" の形（コピー＆貼り付けでそのまま使える）かを確かめる。あわせて、ひな型から
 // 変わったパートとVBAマクロが元のままかを表示する。
 // SheetJS は app/node_modules のものを使う（app で npm install 済みであること）。
 'use strict';
@@ -46,10 +46,13 @@ function main(file, sheets) {
     const times = [];
     for (let d = 1; d <= 31; d++) {
       const c = ws['AL' + (2 * d + 2)];
-      if (c) times.push(`${d}日${XLSX.utils.format_cell(c)}`);
+      if (!c) continue;
+      times.push(`${d}日${XLSX.utils.format_cell(c)}`);
+      if (c.t !== 's' || !/^\d{1,2}:\d{2}$/.test(String(c.v))) {
+        console.log(`  ★${d}日の下校時刻が文字列「15:45」の形でない（型=${c.t} 値=${c.v}）`); bad++;
+      }
     }
-    console.log(`  下校時刻（${times.length}日）: ${times.join(' ')}`);
-    if (times.some((t) => /\d\.\d/.test(t))) { console.log('  ★下校時刻が小数で表示される'); bad++; }
+    console.log(`  下校時刻（${times.length}日・文字列）: ${times.join(' ')}`);
   }
   return bad;
 }
